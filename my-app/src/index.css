@@ -1,0 +1,17 @@
+:root {
+  color-scheme: light dark;
+  font: 1rem / 1.6 system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  width: min(36rem, calc(100% - 3rem));
+  margin: 4rem auto;
+}
+
+li + li {
+  margin-top: 0.25rem;
+}
