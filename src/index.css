@@ -55,6 +55,15 @@ body {
   animation: screen-enter 250ms ease-out both;
 }
 
+.guest-stage.screen-enter {
+  animation-name: guest-stage-enter;
+}
+
+.guest-stage .screen-title:focus,
+.voucher-body h2:focus {
+  outline: none;
+}
+
 .top-bar {
   display: flex;
   align-items: center;
@@ -292,6 +301,7 @@ button:disabled {
   cursor: pointer;
   font-size: 17px;
   font-weight: 700;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 
 .drink-option:has(input:checked) {
@@ -332,6 +342,7 @@ button:disabled {
   height: 19px;
   border: 1px solid var(--border);
   border-radius: 50%;
+  transition: background-color 160ms ease, border-color 160ms ease;
 }
 
 .drink-option:has(input:checked) .radio-indicator {
@@ -346,6 +357,11 @@ button:disabled {
   border-left: 2px solid var(--inverse);
   content: "";
   transform: translateY(-1px) rotate(-45deg);
+  animation: check-in 160ms ease-out both;
+}
+
+.guest-menu-notice {
+  margin-top: 18px;
 }
 
 .home-indicator {
@@ -389,6 +405,25 @@ body:has(.dialog[open]) {
 
 .dialog::backdrop {
   background: rgb(0 0 0 / 40%);
+}
+
+.voucher-sheet {
+  transition: min-height 250ms cubic-bezier(.2, .8, .2, 1);
+}
+
+.voucher-sheet[open]::backdrop {
+  animation: screen-enter 220ms ease-out both;
+}
+
+.voucher-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.receipt-sheet .voucher-body,
+.expired-sheet .voucher-body {
+  animation: voucher-result-enter 220ms ease-out both;
 }
 
 .bottom-sheet::after {
@@ -439,7 +474,7 @@ body:has(.dialog[open]) {
   align-self: center;
   width: min(248px, 70vw);
   aspect-ratio: 1;
-  margin-top: clamp(18px, 8svh, 68px);
+  margin-top: clamp(18px, 6.5svh, 55px);
   border: 1px solid #e5e5ea;
   border-radius: 16px;
   background: #fff;
@@ -457,13 +492,58 @@ body:has(.dialog[open]) {
   image-rendering: pixelated;
 }
 
-.expiry-countdown {
+.voucher-timer {
+  display: grid;
+  justify-items: center;
   margin-top: auto;
   padding-top: 12px;
+}
+
+.expiry-countdown {
   text-align: center;
   font-size: 25px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   line-height: 31px;
+}
+
+.voucher-time-track {
+  width: min(144px, 100%);
+  height: 4px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--border);
+}
+
+.voucher-time-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink);
+  transform: scaleX(var(--time-remaining));
+  transform-origin: left;
+  transition: transform 250ms linear, background-color 180ms ease;
+}
+
+.voucher-timer-note {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.voucher-timer-soon {
+  --timer-warning: #a1400f;
+  color: var(--timer-warning);
+}
+
+.manager-theme .voucher-timer-soon {
+  --timer-warning: #ffbc7c;
+}
+
+.voucher-timer-soon .voucher-time-track span {
+  background: var(--timer-warning);
 }
 
 .sheet-actions {
@@ -511,6 +591,10 @@ body:has(.dialog[open]) {
 
 .expired-sheet {
   min-height: 287px;
+}
+
+.expired-sheet .sheet-actions {
+  gap: 8px;
 }
 
 .expired-sheet .sheet-handle {
@@ -839,6 +923,16 @@ body:has(.dialog[open]) {
   to { opacity: 1; }
 }
 
+@keyframes guest-stage-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes voucher-result-enter {
+  from { opacity: .65; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes sheet-enter {
   from { transform: translateY(36px); opacity: .8; }
   to { transform: translateY(0); opacity: 1; }
@@ -878,6 +972,18 @@ body:has(.dialog[open]) {
   *::after {
     animation-duration: .01ms !important;
     transition-duration: .01ms !important;
+  }
+
+  .welcome-screen.screen-enter,
+  .guest-stage.screen-enter,
+  .guest-stage .success-mark img,
+  .guest-stage .radio-indicator::after,
+  .voucher-sheet[open],
+  .voucher-sheet[open]::backdrop,
+  .voucher-sheet .voucher-body,
+  .voucher-sheet .success-mark img {
+    animation-name: none;
+    transition-property: none;
   }
 }
 

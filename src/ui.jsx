@@ -42,10 +42,10 @@ export function Screen({ children, className = "", role }) {
   );
 }
 
-export function ScreenTitle({ children, description }) {
+export function ScreenTitle({ children, description, focusRef }) {
   return (
     <>
-      <h1 className="screen-title">{children}</h1>
+      <h1 className="screen-title" ref={focusRef} tabIndex={focusRef ? -1 : undefined}>{children}</h1>
       {description && <p className="screen-description">{description}</p>}
     </>
   );
@@ -60,7 +60,7 @@ export function TextField({ label, name, ...props }) {
   );
 }
 
-export function Dialog({ titleId, onClose, children, className = "" }) {
+export function Dialog({ titleId, onClose, children, className = "", focusKey }) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -68,6 +68,12 @@ export function Dialog({ titleId, onClose, children, className = "" }) {
     dialog.showModal();
     return () => dialog.close();
   }, []);
+
+  useEffect(() => {
+    if (focusKey !== undefined) {
+      ref.current.querySelector(`#${titleId}`)?.focus({ preventScroll: true });
+    }
+  }, [focusKey, titleId]);
 
   return (
     <dialog

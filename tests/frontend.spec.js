@@ -205,6 +205,7 @@ test("Admin imports and searches guests, adds stock, and updates the Staff menu"
   await panel.getByLabel("Identifier", { exact: true }).fill("STF-ADD");
   await panel.getByLabel("Department").fill("Operations");
   await panel.getByRole("button", { name: "Save" }).click();
+  await expect(panel).toBeHidden();
   await page.getByRole("searchbox", { name: "Search guests" }).fill("added");
   await expect(page.getByText("Added Demo · 5 left")).toBeVisible();
 
@@ -232,9 +233,47 @@ test("registration validates through the form and fits a short phone viewport", 
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByLabel("Full name")).toBeFocused();
   await expect(page.getByText("Full name is required.")).toBeVisible();
+  await page.getByLabel("Staff ID", { exact: true }).fill("STF-123");
   await page.getByRole("button", { name: "Phone number" }).click();
   await expect(page.getByLabel("Phone number", { exact: true })).toHaveAttribute("inputmode", "tel");
+  await expect(page.getByLabel("Phone number", { exact: true })).toHaveValue("");
+  await page.getByLabel("Phone number", { exact: true }).fill("5550100");
+  await page.getByRole("button", { name: "Staff ID" }).click();
+  await expect(page.getByLabel("Staff ID", { exact: true })).toHaveValue("STF-123");
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+});
+
+test("Guest voucher sheet keeps focus through expiry and can renew the same drink", async ({ page }) => {
+  await page.clock.install();
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/staff?demo=1");
+  await register(page);
+  await expect(page.getByRole("heading", { name: "Choose a drink" })).toBeFocused();
+  await page.getByRole("radio", { name: "Sparkling water" }).check();
+  const original = await issueCode(page);
+  const dialog = page.getByRole("dialog");
+  const sheet = await dialog.elementHandle();
+  await expect(dialog.getByRole("heading", { name: "Show this at the bar" })).toBeFocused();
+  await expect(dialog).toHaveCSS("animation-name", "sheet-enter");
+
+  await page.clock.fastForward(91_000);
+  await expect(dialog.getByText("Expires soon")).toBeVisible();
+  await expect(dialog.getByText("30 seconds left")).toHaveCount(1);
+  await page.clock.fastForward(30_000);
+  await expect(dialog.getByRole("heading", { name: "Voucher expired" })).toBeFocused();
+  expect(await sheet.evaluate((node) => node.isConnected && node.open)).toBe(true);
+
+  await dialog.getByRole("button", { name: "Get a new voucher" }).click();
+  await expect(dialog.getByRole("heading", { name: "Show this at the bar" })).toBeFocused();
+  await expect(dialog.getByText("Sparkling water")).toBeVisible();
+  await expect(dialog.getByText("120 seconds left")).toHaveCount(1);
+  await expect(dialog.getByRole("img", { name: "Voucher QR code" })).not.toHaveAttribute("src", original.src);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(dialog).toHaveCSS("animation-name", "none");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Continue" })).toBeFocused();
+  await expect(page.getByText("5 drinks left")).toBeVisible();
 });
 
 test("Bartender manages availability and restocks drinks across guest menus", async ({ page: bar, context }) => {
