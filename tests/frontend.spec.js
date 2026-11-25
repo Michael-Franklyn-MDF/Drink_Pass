@@ -239,8 +239,12 @@ test("registration validates through the form and fits a short phone viewport", 
 
 test("Bartender manages availability and restocks drinks across guest menus", async ({ page: bar, context }) => {
   await bar.goto("/bartender?demo=1");
-  await bar.getByRole("button", { name: "Manage drinks" }).click();
+  const nav = bar.getByRole("navigation", { name: "Bartender sections" });
+  await expect(nav.getByRole("button", { name: "Scan", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(bar.getByRole("button", { name: "Add drink" })).toHaveCount(0);
+  await nav.getByRole("button", { name: "Drinks" }).click();
   await expect(bar.getByRole("heading", { name: "Drinks and stock" })).toBeVisible();
+  await expect(nav.getByRole("button", { name: "Drinks" })).toHaveAttribute("aria-current", "page");
   await bar.getByRole("button", { name: "Add drink" }).click();
   const dialog = bar.getByRole("dialog");
   await dialog.getByLabel("Drink name").fill("Tonic water");
@@ -263,14 +267,15 @@ test("Bartender manages availability and restocks drinks across guest menus", as
   await manager.getByRole("button", { name: "Continue" }).click();
   await expect(manager.getByRole("radio", { name: /Tonic water.*Unavailable/ })).toBeDisabled();
 
-  await bar.getByRole("button", { name: "Back to scanner" }).click();
+  await nav.getByRole("button", { name: "Scan", exact: true }).click();
+  await expect(nav.getByRole("button", { name: "Scan", exact: true })).toHaveAttribute("aria-current", "page");
   await enterCode(bar, code);
   await expect(bar.getByRole("heading", { name: "Drink unavailable" })).toBeVisible();
   await expect(staff.getByRole("heading", { name: "Show this at the bar" })).toBeVisible();
-  await bar.getByRole("button", { name: "Manage drinks" }).click();
+  await nav.getByRole("button", { name: "Drinks" }).click();
   await bar.getByRole("button", { name: "Enable Tonic water" }).click();
   await expect(manager.getByRole("radio", { name: "Tonic water" })).toBeEnabled();
-  await bar.getByRole("button", { name: "Back to scan result" }).click();
+  await nav.getByRole("button", { name: "Scan", exact: true }).click();
   await expect(bar.getByRole("heading", { name: "Drink unavailable" })).toBeVisible();
   await bar.getByRole("button", { name: "Scan next" }).click();
   await enterCode(bar, code);
@@ -278,7 +283,7 @@ test("Bartender manages availability and restocks drinks across guest menus", as
   await expect(staff.getByRole("dialog").getByText("4 drinks left")).toBeVisible();
   await expect(manager.getByRole("radio", { name: /Tonic water.*Out of stock/ })).toBeDisabled();
 
-  await bar.getByRole("button", { name: "Manage drinks" }).click();
+  await nav.getByRole("button", { name: "Drinks" }).click();
   await expect(tonic.getByText("0 bottles · Out of stock")).toBeVisible();
   await bar.getByRole("button", { name: "Restock Tonic water" }).click();
   await dialog.getByLabel("Bottles to add").fill("3");

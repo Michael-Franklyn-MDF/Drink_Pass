@@ -3,7 +3,7 @@ import { canServeDrink, setDrinkEnabled, useEvent } from "./eventStore.js";
 import StockDialog from "./StockDialog.jsx";
 import { Screen, ScreenTitle } from "./ui.jsx";
 
-export default function BartenderDrinks({ onBack, backLabel }) {
+export default function BartenderDrinks({ renderNavigation }) {
   const { drinks } = useEvent();
   const [panel, setPanel] = useState(null);
   const [pending, setPending] = useState(null);
@@ -27,7 +27,7 @@ export default function BartenderDrinks({ onBack, backLabel }) {
 
   return (
     <>
-      <Screen role="Bartender" className="bartender-drinks">
+      <Screen role="Bartender" className="bartender-screen">
         <div className="screen-content">
           <ScreenTitle description="Update stock and availability on the guest menu.">Drinks and stock</ScreenTitle>
           <ul className="bartender-drink-list">
@@ -55,9 +55,8 @@ export default function BartenderDrinks({ onBack, backLabel }) {
           {notice && <p className="screen-description" role="status">{notice}</p>}
           {error && <p className="field-error" role="alert">{error}</p>}
         </div>
-        <div className="screen-actions bartender-actions">
-          <button className="button button-secondary" type="button" onClick={onBack}>{backLabel}</button>
-          <button className="button button-primary" type="button" onClick={() => setPanel({ action: "add" })}>Add drink</button>
+        <div className="screen-actions navigation-actions">
+          {renderNavigation(() => setPanel({ action: "add" }))}
         </div>
       </Screen>
       {panel && (

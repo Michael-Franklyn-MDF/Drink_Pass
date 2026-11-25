@@ -632,16 +632,11 @@ body:has(.dialog[open]) {
   min-height: 48px;
 }
 
-.bartender-actions {
-  display: grid;
-  gap: 10px;
-}
-
-.bartender-drinks {
+.bartender-screen {
   height: 100svh;
 }
 
-.bartender-drinks .screen-content {
+.bartender-screen .screen-content {
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -761,7 +756,7 @@ body:has(.dialog[open]) {
   border: 0;
 }
 
-.admin-actions {
+.navigation-actions {
   display: grid;
   gap: 30px;
 }
@@ -771,20 +766,20 @@ body:has(.dialog[open]) {
   gap: 11px;
 }
 
-.admin-nav-group {
+.bottom-nav-group {
   display: flex;
   justify-content: center;
   gap: clamp(8px, 4vw, 17px);
 }
 
-.admin-nav,
-.admin-add {
+.bottom-nav,
+.bottom-nav-add {
   color: var(--inverse);
   background: var(--ink);
   border-radius: 28px;
 }
 
-.admin-nav {
+.bottom-nav {
   display: flex;
   align-items: stretch;
   width: min(251px, 100%);
@@ -792,7 +787,7 @@ body:has(.dialog[open]) {
   padding: 5px;
 }
 
-.admin-nav button {
+.bottom-nav button {
   display: flex;
   flex: 1;
   align-items: center;
@@ -805,13 +800,13 @@ body:has(.dialog[open]) {
   font-weight: 700;
 }
 
-.admin-nav button[aria-current] {
+.bottom-nav button[aria-current] {
   flex: 0 0 min(119px, 48%);
   color: var(--ink);
   background: var(--surface);
 }
 
-.admin-add {
+.bottom-nav-add {
   display: grid;
   flex: 0 0 56px;
   height: 56px;
@@ -872,7 +867,7 @@ body:has(.dialog[open]) {
     padding-bottom: 44px;
   }
 
-  .admin-actions {
+  .navigation-actions {
     gap: 16px;
   }
 }

@@ -2,10 +2,12 @@ import { useState } from "react";
 import {
   addGuests, formatTime, IDENTIFIER_TYPES, INITIAL_VOUCHERS, localDate, useEvent,
 } from "./eventStore.js";
+import BottomNav from "./BottomNav.jsx";
 import StockDialog from "./StockDialog.jsx";
 import { Dialog, Screen, ScreenTitle, TextField } from "./ui.jsx";
 
 const TABS = { guests: ["Guest list", "Guests"], stock: ["Drinks and stock", "Stock"], orders: ["Served drinks", "Orders"] };
+const ADMIN_NAV_TABS = Object.entries(TABS).map(([id, [, label]]) => ({ id, label }));
 const IMPORT_COLUMNS = ["Full name", "Identifier", "Department", "Role", "Identifier type", "Vouchers"];
 const ORDER_COLUMNS = ["Drink", "Guest", "Identifier", "Department", "Date", "Time", "Bartender"];
 
@@ -133,27 +135,6 @@ function AdminDialog({ panel, close, notify }) {
   );
 }
 
-function AdminNav({ active, select, add }) {
-  return (
-    <div className="admin-nav-group">
-      <nav className="admin-nav" aria-label="Admin sections">
-        {Object.entries(TABS).map(([id, [, label]]) => (
-          <button key={id} type="button" aria-label={label} aria-current={id === active ? "page" : undefined}
-            onClick={() => select(id)}>
-            <img src={`/assets/${id}${id === active ? "-active" : ""}.svg`} alt="" />
-            {id === active && <span>{label}</span>}
-          </button>
-        ))}
-      </nav>
-      {active !== "orders" && (
-        <button type="button" className="admin-add" aria-label={active === "guests" ? "Add guest" : "Add drink"} onClick={add}>
-          <img src="/assets/add.svg" alt="" />
-        </button>
-      )}
-    </div>
-  );
-}
-
 export default function Admin() {
   const data = useEvent();
   const [active, setActive] = useState("guests");
@@ -243,15 +224,19 @@ export default function Admin() {
           {notice && <p className="screen-description" role="status">{notice}</p>}
           {error && <p className="field-error" role="alert">{error}</p>}
         </div>
-        <div className="screen-actions admin-actions">
+        <div className="screen-actions navigation-actions">
           {active === "orders" && (
             <div className="export-actions">
               <button className="button button-primary" onClick={() => window.print()}>Export PDF</button>
               <button className="button button-secondary" onClick={exportSpreadsheet}>Export spreadsheet</button>
             </div>
           )}
-          <AdminNav active={active} select={(id) => { setActive(id); setNotice(""); setError(""); }}
-            add={() => setPanel({ type: active === "guests" ? "add-guest" : "add-stock" })} />
+          <BottomNav label="Admin sections" tabs={ADMIN_NAV_TABS} active={active}
+            onSelect={(id) => { setActive(id); setNotice(""); setError(""); }}
+            add={active === "orders" ? undefined : {
+              label: active === "guests" ? "Add guest" : "Add drink",
+              onClick: () => setPanel({ type: active === "guests" ? "add-guest" : "add-stock" }),
+            }} />
         </div>
       </Screen>
       {active === "orders" && (

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import BartenderDrinks from "./BartenderDrinks.jsx";
+import BottomNav from "./BottomNav.jsx";
 import { DEMO_BARTENDER, formatTime, scanVoucher } from "./eventStore.js";
 import { isDemoMode, Screen, ScreenTitle } from "./ui.jsx";
 
@@ -86,14 +87,14 @@ function useCamera({ enabled, videoRef, onRead, onError }) {
   }, [enabled, onError, onRead, videoRef]);
 }
 
-function ScanResult({ result, onNext, onRetry, onManage }) {
+function ScanResult({ result, onNext, onRetry, navigation }) {
   const [icon, title, instruction, detail] = MESSAGES[result.status];
   const { order } = result;
   const accepted = result.status === "accepted";
   const retry = result.status === "offline" || result.status === "error";
 
   return (
-    <Screen role="Bartender">
+    <Screen role="Bartender" className="bartender-screen">
       <div className="screen-content">
         <ScreenTitle>Scan result</ScreenTitle>
         <div className="scan-result" role="status">
@@ -110,16 +111,16 @@ function ScanResult({ result, onNext, onRetry, onManage }) {
           )}
         </div>
       </div>
-      <div className="screen-actions bartender-actions">
-        <button className="button button-secondary" onClick={onManage}>Manage drinks</button>
+      <div className="screen-actions navigation-actions">
         <button className="button button-primary" onClick={retry ? onRetry : onNext}>{retry ? "Try again" : "Scan next"}</button>
+        {navigation}
       </div>
     </Screen>
   );
 }
 
 export default function Bartender() {
-  const [managing, setManaging] = useState(false);
+  const [section, setSection] = useState("scan");
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [cameraUsed, setCameraUsed] = useState(false);
   const [result, setResult] = useState(null);
@@ -171,22 +172,28 @@ export default function Bartender() {
     if (cameraUsed) enableCamera();
   }
 
-  function manageDrinks() {
-    setCameraEnabled(false);
-    setManaging(true);
+  function selectSection(nextSection) {
+    if (nextSection === "drinks") setCameraEnabled(false);
+    setSection(nextSection);
   }
 
-  if (managing) {
-    return <BartenderDrinks onBack={() => setManaging(false)} backLabel={result ? "Back to scan result" : "Back to scanner"} />;
+  function navigation(add) {
+    return (
+      <BottomNav label="Bartender sections" active={section} onSelect={selectSection}
+        tabs={[{ id: "scan", label: "Scan" }, { id: "drinks", label: "Drinks", icon: "stock", disabled: scanning }]}
+        add={add ? { label: "Add drink", onClick: add } : undefined} />
+    );
   }
+
+  if (section === "drinks") return <BartenderDrinks renderNavigation={navigation} />;
 
   if (result) {
-    return <ScanResult result={result} onNext={nextScan} onRetry={() => scan(lastCode.current)} onManage={manageDrinks} />;
+    return <ScanResult result={result} onNext={nextScan} onRetry={() => scan(lastCode.current)} navigation={navigation()} />;
   }
 
   const cameraActive = cameraEnabled && !cameraError;
   return (
-    <Screen role="Bartender">
+    <Screen role="Bartender" className="bartender-screen">
       <div className="screen-content">
         <ScreenTitle description={cameraActive
           ? "Position the guest’s QR code inside the frame."
@@ -207,11 +214,11 @@ export default function Bartender() {
           </form>
         )}
       </div>
-      <div className="screen-actions bartender-actions">
-        <button className="button button-secondary" disabled={scanning} onClick={manageDrinks}>Manage drinks</button>
+      <div className="screen-actions navigation-actions">
         <button className="button button-primary" disabled={scanning} onClick={cameraActive
           ? () => setCameraEnabled(false)
           : enableCamera}>{cameraActive ? "Stop camera" : "Enable camera"}</button>
+        {navigation()}
       </div>
     </Screen>
   );
