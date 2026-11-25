@@ -37,7 +37,7 @@ function TopBar() {
 
 function Screen({ children, className = "" }) {
   return (
-    <section className={`screen flex min-h-svh flex-col px-6 ${className}`}>
+    <section className={`screen screen-enter flex min-h-svh flex-col px-6 ${className}`}>
       <TopBar />
       {children}
     </section>
@@ -429,9 +429,9 @@ function App() {
               aria-labelledby="receipt-title"
             >
               <div className="sheet-handle mb-4 h-1 w-[46px] shrink-0 self-center rounded-full bg-[#e5e5ea]" aria-hidden="true" />
-              <div className="grid size-11 place-items-center rounded-full bg-[#f1f1f5]" aria-hidden="true">
+              <div className="success-mark grid size-11 place-items-center rounded-full bg-[#f1f1f5]" aria-hidden="true">
                 <svg viewBox="0 0 24 24" className="size-7" fill="none">
-                  <path d="m5 12 4.5 4.5L19 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path className="success-mark-path" d="m5 12 4.5 4.5L19 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
               <h2 className="mt-[10px] text-[30px] leading-[36px] font-bold tracking-[-0.8px]" id="receipt-title">
