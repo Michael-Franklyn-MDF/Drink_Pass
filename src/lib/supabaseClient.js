@@ -1,6 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
+import { getAppRole } from "../ui.jsx";
 
-export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-);
+const url = import.meta.env.VITE_SUPABASE_URL?.trim();
+const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
+
+export const supabase = url && key ? createClient(url, key, {
+  auth: { storageKey: `drink-pass-auth-${getAppRole()}` },
+}) : null;

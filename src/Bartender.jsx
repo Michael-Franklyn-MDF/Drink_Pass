@@ -104,8 +104,9 @@ function ScanResult({ result, onNext, onRetry, navigation }) {
           {detail && <p>{detail}</p>}
           {order && (
             <>
-              <p>{order.guest.fullName} · {accepted ? order.guest.identifier : order.drink}</p>
-              {accepted && <p>{order.guest.department}</p>}
+              <p>{order.guest.fullName}{!accepted ? ` · ${order.drink}` :
+                order.guest.identifier && ` · ${order.guest.identifier}`}</p>
+              {accepted && order.guest.department && <p>{order.guest.department}</p>}
               <p>{accepted ? "Scanned" : "Redeemed at"} {formatTime(order.scannedAt)}</p>
             </>
           )}

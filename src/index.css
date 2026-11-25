@@ -998,3 +998,12 @@ body:has(.dialog[open]) {
   .print-orders thead { display: table-header-group; }
   .print-orders tr { break-inside: avoid; }
 }
+.live-sign-out {
+  align-self: center;
+  margin-block: 0.5rem;
+}
+
+.live-copy-invite {
+  display: block;
+  margin-top: 0.25rem;
+}

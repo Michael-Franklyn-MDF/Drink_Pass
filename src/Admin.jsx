@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  addGuests, formatTime, IDENTIFIER_TYPES, INITIAL_VOUCHERS, localDate, useEvent,
+  addGuests, backendMode, formatTime, IDENTIFIER_TYPES, INITIAL_VOUCHERS, localDate, useEvent,
 } from "./eventStore.js";
 import BottomNav from "./BottomNav.jsx";
 import StockDialog from "./StockDialog.jsx";
@@ -9,7 +9,7 @@ import { Dialog, Screen, ScreenTitle, TextField } from "./ui.jsx";
 const TABS = { guests: ["Guest list", "Guests"], stock: ["Drinks and stock", "Stock"], orders: ["Served drinks", "Orders"] };
 const ADMIN_NAV_TABS = Object.entries(TABS).map(([id, [, label]]) => ({ id, label }));
 const IMPORT_COLUMNS = ["Full name", "Identifier", "Department", "Role", "Identifier type", "Vouchers"];
-const ORDER_COLUMNS = ["Drink", "Guest", "Identifier", "Department", "Date", "Time", "Bartender"];
+const ORDER_COLUMNS = ["Drink", "Guest", "Date", "Time", "Bartender"];
 
 function ChoiceField({ label, name, options }) {
   return (
@@ -155,9 +155,20 @@ export default function Admin() {
   const guests = data.guests.filter((guest) => [guest.fullName, guest.identifier, guest.department, guest.role]
     .some((value) => value.toLowerCase().includes(search)));
   const orderRows = orders.map((order) => [
-    order.drink, order.guest.fullName, order.guest.identifier, order.guest.department,
+    order.drink, order.guest.fullName,
     localDate(order.scannedAt), formatTime(order.scannedAt), order.bartender,
   ]);
+
+  async function copyInvite(guest) {
+    setNotice("");
+    setError("");
+    try {
+      await navigator.clipboard.writeText(guest.invite);
+      setNotice(`Invitation code copied for ${guest.fullName}.`);
+    } catch {
+      setError("Couldn’t copy the invitation code. Check clipboard access and try again.");
+    }
+  }
 
   async function exportSpreadsheet() {
     setError("");
@@ -181,7 +192,17 @@ export default function Admin() {
                 <button className="button button-secondary" onClick={() => setPanel({ type: "import" })}>Import</button>
               </div>
               <ul className="admin-list">
-                {guests.map((guest) => <li key={guest.id}>{guest.fullName} · {guest.role === "manager" ? "Manager" : `${guest.remaining} left`}</li>)}
+                {guests.map((guest) => (
+                  <li key={guest.id}>
+                    {guest.fullName} · {guest.role === "manager" ? "Manager" : `${guest.remaining} left`}
+                    {backendMode && guest.invite && (
+                      <button className="text-link live-copy-invite" type="button"
+                        aria-label={`Copy invitation for ${guest.fullName}`} onClick={() => copyInvite(guest)}>
+                        Copy invitation
+                      </button>
+                    )}
+                  </li>
+                ))}
               </ul>
               {!guests.length && <p className="screen-description">No guests match your search.</p>}
             </>
@@ -214,7 +235,7 @@ export default function Admin() {
                 {orders.map((order) => (
                   <li key={order.id}>
                     <div>{order.drink} · {formatTime(order.scannedAt)}</div>
-                    <div>{order.guest.fullName} · {order.guest.identifier}</div>
+                    <div>{order.guest.fullName}{order.guest.identifier && ` · ${order.guest.identifier}`}</div>
                   </li>
                 ))}
               </ul>

@@ -100,13 +100,16 @@ test("camera decodes a Staff voucher and updates receipt, balance, stock and ord
   const download = await downloadPromise;
   const rows = await readSheet(await download.path());
   expect(rows).toHaveLength(2);
-  expect(rows[1]).toEqual(["Sparkling water", "Taylor Demo", "STF-TEST", "Operations", expect.any(String), expect.any(String), "Bar 2"]);
+  expect(rows[0]).toEqual(["Drink", "Guest", "Date", "Time", "Bartender"]);
+  expect(rows[1]).toEqual(["Sparkling water", "Taylor Demo", expect.any(String), expect.any(String), "Bar 2"]);
 
   await admin.evaluate(() => { window.print = () => { document.body.dataset.printed = "yes"; }; });
   await admin.getByRole("button", { name: "Export PDF" }).click();
   await expect(admin.locator("body")).toHaveAttribute("data-printed", "yes");
   await admin.emulateMedia({ media: "print" });
   await expect(admin.getByRole("table").getByText("Taylor Demo")).toBeVisible();
+  await expect(admin.getByRole("table").getByText("STF-TEST")).toHaveCount(0);
+  await expect(admin.getByRole("table").getByText("Operations")).toHaveCount(0);
   await expect(admin.getByRole("table").getByText("Alex Kamau")).toHaveCount(0);
   expect((await admin.pdf()).subarray(0, 5).toString()).toBe("%PDF-");
 });

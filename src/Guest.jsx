@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import {
-  canServeDrink, cancelVoucher, formatTime, IDENTIFIER_TYPES, INITIAL_VOUCHERS, managerInvitation,
+  backendMode, canServeDrink, cancelVoucher, formatTime, IDENTIFIER_TYPES, INITIAL_VOUCHERS, managerInvitation,
   openVoucher, QR_PREFIX, registerGuest, scanVoucher, useEvent, VOUCHER_DURATION,
 } from "./eventStore.js";
 import { Dialog, isDemoMode, Screen, ScreenTitle } from "./ui.jsx";
@@ -10,13 +10,15 @@ const EMPTY_PROFILE = { fullName: "", identifier: "", department: "" };
 const FIELD_LABELS = { fullName: "Full name", department: "Department" };
 
 function Registration({ manager, onRegister, titleRef }) {
-  const [profile, setProfile] = useState(manager ? managerInvitation : EMPTY_PROFILE);
+  const prefilled = manager && !backendMode;
+  const [profile, setProfile] = useState(prefilled ? managerInvitation : EMPTY_PROFILE);
   const [identifierType, setIdentifierType] = useState("Staff ID");
   const [identifiers, setIdentifiers] = useState({});
+  const [invite, setInvite] = useState("");
   const [validated, setValidated] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const details = manager ? profile : { ...profile, identifier: identifiers[identifierType] ?? "" };
+  const details = prefilled ? profile : { ...profile, identifier: identifiers[identifierType] ?? "" };
 
   function field(name) {
     const label = FIELD_LABELS[name] ?? identifierType;
@@ -26,7 +28,7 @@ function Registration({ manager, onRegister, titleRef }) {
       <div className={`profile-field profile-${name}`} key={name}>
         <label className={name === "identifier" ? "sr-only" : "field-label"} htmlFor={name}>{label}</label>
         <input
-          className="text-field" id={name} name={name} value={details[name]} readOnly={manager}
+          className="text-field" id={name} name={name} value={details[name]} readOnly={prefilled}
           placeholder={`Enter your ${label.toLowerCase().replace(/id$/, "ID")}`}
           onChange={(event) => {
             const { value } = event.target;
@@ -46,7 +48,8 @@ function Registration({ manager, onRegister, titleRef }) {
   async function submit(event) {
     event.preventDefault();
     if (saving) return;
-    const missing = Object.keys(EMPTY_PROFILE).find((name) => !details[name].trim());
+    const missing = Object.keys(EMPTY_PROFILE).find((name) => !details[name].trim()) ||
+      (backendMode && !invite.trim() ? "invite" : "");
     setValidated(true);
     if (missing) {
       event.currentTarget.elements.namedItem(missing).focus();
@@ -59,9 +62,10 @@ function Registration({ manager, onRegister, titleRef }) {
       await onRegister({
         fullName: details.fullName.trim(), identifier: details.identifier.trim(),
         department: details.department.trim(), identifierType, role: manager ? "manager" : "staff",
+        ...(backendMode && { invite: invite.trim() }),
       });
-    } catch {
-      setError("Couldn’t save your details. Try again.");
+    } catch (issue) {
+      setError(backendMode ? issue.message : "Couldn’t save your details. Try again.");
       setSaving(false);
     }
   }
@@ -69,12 +73,12 @@ function Registration({ manager, onRegister, titleRef }) {
   return (
     <>
       <div className="screen-content">
-        <ScreenTitle focusRef={titleRef} description={manager ? "Pre-filled from your manager QR." : "Register once for this event."}>
+        <ScreenTitle focusRef={titleRef} description={prefilled ? "Pre-filled from your manager QR." : "Register once for this event."}>
           Your details
         </ScreenTitle>
         <form id="registration" className="registration-form" onSubmit={submit} noValidate>
           {field("fullName")}
-          {!manager && (
+          {!prefilled && (
             <>
               <p className="field-label identifier-label" id="identifier-label">Identify yourself with</p>
               <div className="segmented-control" role="group" aria-labelledby="identifier-label">
@@ -87,7 +91,15 @@ function Registration({ manager, onRegister, titleRef }) {
             </>
           )}
           {field("department")}
-          {manager && (
+          {backendMode && (
+            <div className="profile-field">
+              <label className="field-label" htmlFor="invite">Invitation code</label>
+              <input className="text-field" id="invite" name="invite" autoComplete="off" required value={invite}
+                aria-invalid={validated && !invite.trim()}
+                onChange={(event) => { setInvite(event.target.value); setError(""); }} />
+            </div>
+          )}
+          {prefilled && (
             <>
               <p className="manager-chip"><span aria-hidden="true">✓</span> Registered as Manager</p>
               <p className="screen-description manager-role-note">Your role comes from the QR and can't be changed.</p>
@@ -322,7 +334,7 @@ export default function Guest({ mode, role }) {
           <img src={`/assets/brand-${mode}.svg`} alt="" width="64" height="64" />
           <ScreenTitle>Welcome</ScreenTitle>
           <p className="screen-description welcome-description">Choose a drink.<br />Show your pass at the bar.</p>
-          {!manager && <div className="welcome-summary">{INITIAL_VOUCHERS} drink vouchers</div>}
+          {!manager && !backendMode && <div className="welcome-summary">{INITIAL_VOUCHERS} drink vouchers</div>}
         </div>
         <div className="screen-actions">
           <button className="button button-primary" onClick={() => setRegistering(true)}>Get started</button>
