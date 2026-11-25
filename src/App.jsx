@@ -2,7 +2,14 @@ import { useEffect, useState } from "react";
 
 const INITIAL_VOUCHERS = 5;
 const VOUCHER_DURATION = 120;
-const DRINKS = ["Ginger beer", "Sparkling water", "Passion juice"];
+const DRINKS = [
+  "Ginger beer",
+  "Sparkling water",
+  "Passion juice",
+  "Cola",
+  "Lemonade",
+  "Iced tea",
+];
 const IDENTIFIER_TYPES = ["Staff ID", "Phone number", "Personal ID"];
 
 function BrandMark() {
@@ -122,12 +129,17 @@ function App() {
     department: "",
   });
   const [selectedDrink, setSelectedDrink] = useState(DRINKS[0]);
-  const [formError, setFormError] = useState("");
+  const [showValidation, setShowValidation] = useState(false);
   const [notice, setNotice] = useState("");
   const [voucherOpen, setVoucherOpen] = useState(false);
   const [voucherResult, setVoucherResult] = useState(null);
   const [secondsLeft, setSecondsLeft] = useState(VOUCHER_DURATION);
   const [receipt, setReceipt] = useState(null);
+  const fieldErrors = {
+    fullName: showValidation && !registration.fullName.trim() ? "Full name is required." : "",
+    identifier: showValidation && !registration.identifier.trim() ? `${identifierType} is required.` : "",
+    department: showValidation && !registration.department.trim() ? "Department is required." : "",
+  };
 
   useEffect(() => {
     if (!voucherOpen) return undefined;
@@ -153,13 +165,20 @@ function App() {
 
   function continueRegistration(event) {
     event.preventDefault();
-    const missingField = Object.values(registration).some((value) => !value.trim());
+    const missingField = Object.entries(registration).find(([, value]) => !value.trim())?.[0];
+    setShowValidation(true);
+
     if (missingField) {
-      setFormError("Please complete all fields to continue.");
+      const fieldIds = {
+        fullName: "full-name",
+        identifier: "identifier",
+        department: "department",
+      };
+      document.getElementById(fieldIds[missingField])?.focus();
       return;
     }
 
-    setFormError("");
+    setShowValidation(false);
     setNotice("");
     setScreen("menu");
   }
@@ -251,19 +270,22 @@ function App() {
             <h1 className="text-4xl leading-[1.15] font-bold tracking-[-1.35px]">Your details</h1>
             <p className="mt-1 text-[15px] leading-[23px] text-[#65656b]">Register once for this event.</p>
             <form className="mt-8 flex flex-col" onSubmit={continueRegistration} noValidate>
-              <label className="field-label" htmlFor="full-name">
+              <label className={`field-label ${fieldErrors.fullName ? "field-label-error" : ""}`} htmlFor="full-name">
                 Full name
               </label>
               <input
                 className="text-field"
                 id="full-name"
                 name="fullName"
+                aria-invalid={Boolean(fieldErrors.fullName)}
+                aria-describedby={fieldErrors.fullName ? "full-name-error" : undefined}
                 autoComplete="name"
                 placeholder="Enter your full name"
                 value={registration.fullName}
                 onChange={updateRegistration}
                 required
               />
+              {fieldErrors.fullName && <p className="field-error" id="full-name-error">{fieldErrors.fullName}</p>}
 
               <span className="field-label identifier-label" id="identifier-label">
                 Identify yourself with
@@ -292,26 +314,31 @@ function App() {
                 name="identifier"
                 autoComplete={identifierType === "Phone number" ? "tel" : "off"}
                 inputMode={identifierType === "Phone number" ? "tel" : "text"}
+                aria-invalid={Boolean(fieldErrors.identifier)}
+                aria-describedby={fieldErrors.identifier ? "identifier-error" : undefined}
                 placeholder={`Enter your ${identifierType.toLowerCase()}`}
                 value={registration.identifier}
                 onChange={updateRegistration}
                 required
               />
+              {fieldErrors.identifier && <p className="field-error" id="identifier-error">{fieldErrors.identifier}</p>}
 
-              <label className="field-label department-label" htmlFor="department">
+              <label className={`field-label department-label ${fieldErrors.department ? "field-label-error" : ""}`} htmlFor="department">
                 Department
               </label>
               <input
                 className="text-field"
                 id="department"
                 name="department"
+                aria-invalid={Boolean(fieldErrors.department)}
+                aria-describedby={fieldErrors.department ? "department-error" : undefined}
                 autoComplete="organization-title"
                 placeholder="Enter your department"
                 value={registration.department}
                 onChange={updateRegistration}
                 required
               />
-              {formError && <p className="form-error mt-2.5 text-[13px] text-[#b42318]" role="alert">{formError}</p>}
+              {fieldErrors.department && <p className="field-error" id="department-error">{fieldErrors.department}</p>}
             </form>
           </div>
           <button className="button button-primary mt-auto" onClick={continueRegistration}>
