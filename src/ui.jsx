@@ -51,6 +51,15 @@ export function ScreenTitle({ children, description }) {
   );
 }
 
+export function TextField({ label, name, ...props }) {
+  return (
+    <label className="admin-field">
+      <span className="field-label">{label}</span>
+      <input className="text-field" name={name} required {...props} />
+    </label>
+  );
+}
+
 export function Dialog({ titleId, onClose, children, className = "" }) {
   const ref = useRef(null);
 

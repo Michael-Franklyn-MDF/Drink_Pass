@@ -1,21 +1,13 @@
 import { useState } from "react";
 import {
-  addDrink, addGuests, formatTime, IDENTIFIER_TYPES, INITIAL_VOUCHERS, localDate, setStock, useEvent,
+  addGuests, formatTime, IDENTIFIER_TYPES, INITIAL_VOUCHERS, localDate, useEvent,
 } from "./eventStore.js";
-import { Dialog, Screen, ScreenTitle } from "./ui.jsx";
+import StockDialog from "./StockDialog.jsx";
+import { Dialog, Screen, ScreenTitle, TextField } from "./ui.jsx";
 
 const TABS = { guests: ["Guest list", "Guests"], stock: ["Drinks and stock", "Stock"], orders: ["Served drinks", "Orders"] };
 const IMPORT_COLUMNS = ["Full name", "Identifier", "Department", "Role", "Identifier type", "Vouchers"];
 const ORDER_COLUMNS = ["Drink", "Guest", "Identifier", "Department", "Date", "Time", "Bartender"];
-
-function TextField({ label, name, ...props }) {
-  return (
-    <label className="admin-field">
-      <span className="field-label">{label}</span>
-      <input className="text-field" name={name} required {...props} />
-    </label>
-  );
-}
 
 function ChoiceField({ label, name, options }) {
   return (
@@ -67,10 +59,8 @@ async function downloadWorkbook(rows, name) {
 }
 
 function AdminDialog({ panel, close, notify }) {
-  const editingStock = panel.type === "edit-stock";
   const isImport = panel.type === "import";
-  const addGuest = panel.type === "add-guest";
-  const title = isImport ? "Import guests" : addGuest ? "Add guest" : editingStock ? "Update stock" : "Add drink";
+  const title = isImport ? "Import guests" : "Add guest";
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -92,23 +82,11 @@ function AdminDialog({ panel, close, notify }) {
         }
         const added = await addGuests(profiles);
         notify(`${added} imported. ${profiles.length - added} duplicates skipped.`);
-      } else if (addGuest) {
+      } else {
         const profile = guestProfile(values);
         if (!profile) throw new Error("Complete the guest details.");
         if (!await addGuests([profile])) throw new Error("A guest with this identifier already exists.");
         notify("Guest added.");
-      } else {
-        const name = values.name?.trim();
-        const stock = Number(values.stock);
-        if (!Number.isSafeInteger(stock) || stock < 0) throw new Error("Enter a whole number of bottles.");
-        if (editingStock) {
-          await setStock(panel.drink.id, stock);
-          notify("Stock updated.");
-        } else {
-          if (!name) throw new Error("Enter a drink name.");
-          if (!await addDrink(name, stock)) throw new Error("A drink with this name already exists.");
-          notify("Drink added.");
-        }
       }
       close();
     } catch (issue) {
@@ -136,18 +114,13 @@ function AdminDialog({ panel, close, notify }) {
               }
             }}>Download guest template</button>
           </>
-        ) : addGuest ? (
+        ) : (
           <>
             <TextField label="Full name" name="Full name" />
             <ChoiceField label="Identifier type" name="Identifier type" options={IDENTIFIER_TYPES.map((type) => [type, type])} />
             <TextField label="Identifier" name="Identifier" />
             <TextField label="Department" name="Department" />
             <ChoiceField label="Role" name="Role" options={[["staff", "Staff"], ["manager", "Manager"]]} />
-          </>
-        ) : (
-          <>
-            <TextField label="Drink name" name="name" defaultValue={panel.drink?.name} readOnly={editingStock} />
-            <TextField label="Bottles in stock" name="stock" type="number" min="0" step="1" defaultValue={panel.drink?.stock ?? 0} />
           </>
         )}
         {error && <p className="field-error" role="alert">{error}</p>}
@@ -293,7 +266,10 @@ export default function Admin() {
           </table>
         </section>
       )}
-      {panel && <AdminDialog panel={panel} notify={setNotice} close={() => setPanel(null)} />}
+      {panel && (panel.type === "edit-stock" || panel.type === "add-stock"
+        ? <StockDialog action={panel.drink ? "update" : "add"} drink={panel.drink}
+            notify={setNotice} close={() => setPanel(null)} />
+        : <AdminDialog panel={panel} notify={setNotice} close={() => setPanel(null)} />)}
     </>
   );
 }

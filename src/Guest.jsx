@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import {
-  cancelVoucher, formatTime, IDENTIFIER_TYPES, INITIAL_VOUCHERS, managerInvitation,
+  canServeDrink, cancelVoucher, formatTime, IDENTIFIER_TYPES, INITIAL_VOUCHERS, managerInvitation,
   openVoucher, QR_PREFIX, registerGuest, scanVoucher, useEvent, VOUCHER_DURATION,
 } from "./eventStore.js";
 import { Dialog, isDemoMode, Screen, ScreenTitle } from "./ui.jsx";
@@ -241,7 +241,7 @@ export default function Guest({ mode, role }) {
   const [error, setError] = useState("");
   const voucher = data.vouchers[voucherId];
   const selection = data.drinks.find(({ id }) => id === selectedId) ??
-    data.drinks.find(({ stock }) => stock > 0);
+    data.drinks.find(canServeDrink);
   const activeVoucher = voucher && voucher.status !== "cancelled";
   const empty = guest?.remaining === 0 && !activeVoucher;
 
@@ -314,8 +314,8 @@ export default function Guest({ mode, role }) {
             {data.drinks.map((drink) => (
               <label className="drink-option" key={drink.id}>
                 <input type="radio" name="drink" value={drink.id} checked={drink.id === selection?.id}
-                  onChange={() => { setSelectedId(drink.id); setError(""); }} disabled={drink.stock === 0} />
-                <span>{drink.name}{drink.stock === 0 && <small> · Out of stock</small>}</span>
+                  onChange={() => { setSelectedId(drink.id); setError(""); }} disabled={!canServeDrink(drink)} />
+                <span>{drink.name}{!canServeDrink(drink) && <small> · {drink.stock === 0 ? "Out of stock" : "Unavailable"}</small>}</span>
                 <span className="radio-indicator" aria-hidden="true" />
               </label>
             ))}
@@ -324,7 +324,7 @@ export default function Guest({ mode, role }) {
         </div>
         <div className="screen-actions">
           <button className="button button-primary" onClick={issueVoucher}
-            disabled={busy || !selection || selection.stock === 0}>Continue</button>
+            disabled={busy || !canServeDrink(selection)}>Continue</button>
         </div>
       </Screen>
       {activeVoucher && <VoucherSheet key={voucher.id} voucher={voucher}

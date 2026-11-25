@@ -632,6 +632,56 @@ body:has(.dialog[open]) {
   min-height: 48px;
 }
 
+.bartender-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.bartender-drinks {
+  height: 100svh;
+}
+
+.bartender-drinks .screen-content {
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.bartender-drink-list {
+  margin-top: 24px;
+}
+
+.bartender-drink-list li {
+  padding-block: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.bartender-drink-list h2 {
+  font-size: 17px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.bartender-drink-list p {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.bartender-drink-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.bartender-drink-actions .button {
+  width: auto;
+  min-height: 44px;
+  padding-inline: 14px;
+  font-size: 14px;
+}
+
+
 .admin-screen {
   height: 100svh;
 }

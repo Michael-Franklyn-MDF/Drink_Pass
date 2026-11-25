@@ -134,12 +134,35 @@ export function setStock(drinkId, stock) {
   });
 }
 
+export function canServeDrink(drink) {
+  return Boolean(drink && drink.stock > 0 && !drink.paused);
+}
+
+export function restockDrink(drinkId, bottles) {
+  return update((data) => {
+    const drink = data.drinks.find(({ id }) => id === drinkId);
+    if (!drink) throw new Error("This drink is no longer listed.");
+    const nextStock = drink.stock + bottles;
+    if (!Number.isSafeInteger(nextStock)) throw new Error("Enter a smaller number of bottles.");
+    drink.stock = nextStock;
+  });
+}
+
+export function setDrinkEnabled(drinkId, enabled) {
+  return update((data) => {
+    const drink = data.drinks.find(({ id }) => id === drinkId);
+    if (!drink) throw new Error("This drink is no longer listed.");
+    if (enabled && drink.stock <= 0) throw new Error("Restock this drink before enabling it.");
+    drink.paused = !enabled;
+  });
+}
+
 export function openVoucher(guestId, drinkId) {
   return update((data) => {
     const now = Date.now();
     const guest = data.guests.find(({ id }) => guestId === id);
     const drink = data.drinks.find(({ id }) => drinkId === id);
-    if (!guest || !drink || drink.stock <= 0 || guest.remaining === 0) return null;
+    if (!guest || !canServeDrink(drink) || guest.remaining === 0) return null;
 
     const active = Object.values(data.vouchers).find((voucher) =>
       voucher.guestId === guestId && voucher.status === "open" && voucher.expiresAt > now,
@@ -183,7 +206,7 @@ export function scanVoucher(code, bartender = DEMO_BARTENDER, online = navigator
     const guest = data.guests.find(({ id }) => id === voucher.guestId);
     const drink = data.drinks.find(({ id }) => id === voucher.drinkId);
     if (!guest || guest.remaining === 0) return { status: "invalid" };
-    if (!drink || drink.stock <= 0) return { status: "unavailable" };
+    if (!canServeDrink(drink)) return { status: "unavailable" };
 
     if (guest.remaining !== null) guest.remaining -= 1;
     drink.stock -= 1;

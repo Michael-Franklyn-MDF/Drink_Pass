@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import BartenderDrinks from "./BartenderDrinks.jsx";
 import { DEMO_BARTENDER, formatTime, scanVoucher } from "./eventStore.js";
 import { isDemoMode, Screen, ScreenTitle } from "./ui.jsx";
 
@@ -85,7 +86,7 @@ function useCamera({ enabled, videoRef, onRead, onError }) {
   }, [enabled, onError, onRead, videoRef]);
 }
 
-function ScanResult({ result, onNext, onRetry }) {
+function ScanResult({ result, onNext, onRetry, onManage }) {
   const [icon, title, instruction, detail] = MESSAGES[result.status];
   const { order } = result;
   const accepted = result.status === "accepted";
@@ -109,7 +110,8 @@ function ScanResult({ result, onNext, onRetry }) {
           )}
         </div>
       </div>
-      <div className="screen-actions">
+      <div className="screen-actions bartender-actions">
+        <button className="button button-secondary" onClick={onManage}>Manage drinks</button>
         <button className="button button-primary" onClick={retry ? onRetry : onNext}>{retry ? "Try again" : "Scan next"}</button>
       </div>
     </Screen>
@@ -117,6 +119,7 @@ function ScanResult({ result, onNext, onRetry }) {
 }
 
 export default function Bartender() {
+  const [managing, setManaging] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [cameraUsed, setCameraUsed] = useState(false);
   const [result, setResult] = useState(null);
@@ -168,7 +171,18 @@ export default function Bartender() {
     if (cameraUsed) enableCamera();
   }
 
-  if (result) return <ScanResult result={result} onNext={nextScan} onRetry={() => scan(lastCode.current)} />;
+  function manageDrinks() {
+    setCameraEnabled(false);
+    setManaging(true);
+  }
+
+  if (managing) {
+    return <BartenderDrinks onBack={() => setManaging(false)} backLabel={result ? "Back to scan result" : "Back to scanner"} />;
+  }
+
+  if (result) {
+    return <ScanResult result={result} onNext={nextScan} onRetry={() => scan(lastCode.current)} onManage={manageDrinks} />;
+  }
 
   const cameraActive = cameraEnabled && !cameraError;
   return (
@@ -193,7 +207,8 @@ export default function Bartender() {
           </form>
         )}
       </div>
-      <div className="screen-actions">
+      <div className="screen-actions bartender-actions">
+        <button className="button button-secondary" disabled={scanning} onClick={manageDrinks}>Manage drinks</button>
         <button className="button button-primary" disabled={scanning} onClick={cameraActive
           ? () => setCameraEnabled(false)
           : enableCamera}>{cameraActive ? "Stop camera" : "Enable camera"}</button>
