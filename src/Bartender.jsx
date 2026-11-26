@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import BartenderDrinks from "./BartenderDrinks.jsx";
 import BottomNav from "./BottomNav.jsx";
-import { DEMO_BARTENDER, formatTime, scanVoucher } from "./eventStore.js";
+import { DEMO_BARTENDER, formatTime, scanVoucher, useEvent } from "./eventStore.js";
 import { isDemoMode, Screen, ScreenTitle } from "./ui.jsx";
 
 const MESSAGES = {
@@ -121,6 +121,7 @@ function ScanResult({ result, onNext, onRetry, navigation }) {
 }
 
 export default function Bartender() {
+  const { event } = useEvent();
   const [section, setSection] = useState("scan");
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [cameraUsed, setCameraUsed] = useState(false);
@@ -196,6 +197,7 @@ export default function Bartender() {
   return (
     <Screen role="Bartender" className="bartender-screen">
       <div className="screen-content">
+        {event && <p className="screen-description">{event.name}</p>}
         <ScreenTitle description={cameraActive
           ? "Position the guest’s QR code inside the frame."
           : "Allow camera access to scan guest vouchers."}>Scan a voucher</ScreenTitle>

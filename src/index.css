@@ -1018,3 +1018,39 @@ body:has(.dialog[open]) {
   display: block;
   margin-top: 0.25rem;
 }
+
+.event-picker {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.event-picker-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+.event-picker-controls .text-field {
+  min-width: 0;
+}
+
+.event-picker-controls .button {
+  white-space: nowrap;
+}
+
+.event-links summary {
+  cursor: pointer;
+}
+
+.event-links div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-top: 0.5rem;
+}
+
+.event-links a {
+  text-decoration: underline;
+}

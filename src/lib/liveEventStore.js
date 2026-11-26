@@ -3,9 +3,11 @@ import { QR_PREFIX } from "../demoEventStore.js";
 import { getAppRole, isDemoMode } from "../ui.jsx";
 import { supabase } from "./supabaseClient.js";
 
-export const backendMode = new URLSearchParams(window.location.search).get("backend") === "1" && !isDemoMode();
+const params = new URLSearchParams(window.location.search);
+export const backendMode = params.get("backend") === "1" && !isDemoMode();
 const role = getAppRole();
-const sessionKey = `drink-pass-guest-session-${role}`;
+const eventId = params.get("event");
+const sessionKey = `drink-pass-guest-session-${role}${eventId ? `-${eventId}` : ""}`;
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const empty = { guests: [], drinks: [], vouchers: {}, orders: [], sessions: {} };
 const listeners = new Set();
@@ -19,7 +21,9 @@ function getSessionId() {
 
 async function rpc(operation, args) {
   if (!supabase) throw new Error("Supabase is missing its local configuration.");
-  const { data, error } = await supabase.rpc(`drink_pass_${operation}`, args);
+  if (eventId !== null && !uuid.test(eventId)) throw new Error("This event link is invalid.");
+  const scope = eventId && operation !== "create_event" ? { p_event: eventId } : {};
+  const { data, error } = await supabase.rpc(`drink_pass_${operation}`, { ...args, ...scope });
   if (error) throw new Error(error.message);
   return data;
 }
@@ -66,6 +70,12 @@ export async function registerGuest({ invite, ...profile }) {
 
 export function addGuests(profiles) {
   return update("approve", { p_profiles: profiles });
+}
+
+export function createEvent(id, name, date, defaultVouchers) {
+  return rpc("create_event", {
+    p_id: id, p_name: name, p_date: date, p_default_vouchers: defaultVouchers,
+  });
 }
 
 function updateStock(action, values) {

@@ -3,6 +3,7 @@ import {
   addGuests, backendMode, formatTime, IDENTIFIER_TYPES, INITIAL_VOUCHERS, localDate, useEvent,
 } from "./eventStore.js";
 import BottomNav from "./BottomNav.jsx";
+import { EventDialog, EventPicker } from "./AdminEventSetup.jsx";
 import StockDialog from "./StockDialog.jsx";
 import { Dialog, Screen, ScreenTitle, TextField } from "./ui.jsx";
 
@@ -22,20 +23,20 @@ function ChoiceField({ label, name, options }) {
   );
 }
 
-function guestProfile(values) {
+function guestProfile(values, defaultVouchers) {
   const fullName = String(values["Full name"] ?? "").trim();
   const identifier = String(values.Identifier ?? "").trim();
   const department = String(values.Department ?? "").trim();
   const role = String(values.Role ?? "staff").trim().toLowerCase() || "staff";
   const inputType = String(values["Identifier type"] ?? "").trim().toLowerCase() || "staff id";
   const identifierType = IDENTIFIER_TYPES.find((type) => type.toLowerCase() === inputType);
-  const remaining = values.Vouchers === "" || values.Vouchers == null ? INITIAL_VOUCHERS : Number(values.Vouchers);
+  const remaining = String(values.Vouchers ?? "").trim() === "" ? defaultVouchers : Number(values.Vouchers);
   if (!fullName || !identifier || !department || !identifierType ||
-      !["staff", "manager"].includes(role) || !Number.isSafeInteger(remaining) || remaining < 0) return null;
+      !["staff", "manager"].includes(role) || !Number.isInteger(remaining) || remaining < 0 || remaining > 2147483647) return null;
   return { fullName, identifier, department, role, identifierType, remaining };
 }
 
-async function readGuests(file) {
+async function readGuests(file, defaultVouchers) {
   const { readSheet } = await import("read-excel-file/browser");
   const rows = await readSheet(file, 1);
   const [headings, ...body] = rows;
@@ -47,7 +48,7 @@ async function readGuests(file) {
   for (const [index, row] of body.entries()) {
     if (row.every((value) => value == null || value === "")) continue;
     const values = Object.fromEntries(IMPORT_COLUMNS.map((key) => [key, row[columns.indexOf(key.toLowerCase())]]));
-    const profile = guestProfile(values);
+    const profile = guestProfile(values, defaultVouchers);
     if (!profile) throw new Error(`Check guest details on row ${index + 2}.`);
     profiles.push(profile);
   }
@@ -60,7 +61,7 @@ async function downloadWorkbook(rows, name) {
   await writeWorkbook(rows).toFile(name);
 }
 
-function AdminDialog({ panel, close, notify }) {
+function AdminDialog({ panel, close, notify, defaultVouchers }) {
   const isImport = panel.type === "import";
   const title = isImport ? "Import guests" : "Add guest";
   const [error, setError] = useState("");
@@ -76,7 +77,7 @@ function AdminDialog({ panel, close, notify }) {
       if (isImport) {
         let profiles;
         try {
-          profiles = await readGuests(values.workbook);
+          profiles = await readGuests(values.workbook, defaultVouchers);
         } catch (issue) {
           const message = issue.message;
           throw new Error(/^(Include|Check guest details|The spreadsheet)/.test(message)
@@ -85,7 +86,7 @@ function AdminDialog({ panel, close, notify }) {
         const added = await addGuests(profiles);
         notify(`${added} imported. ${profiles.length - added} duplicates skipped.`);
       } else {
-        const profile = guestProfile(values);
+        const profile = guestProfile(values, defaultVouchers);
         if (!profile) throw new Error("Complete the guest details.");
         if (!await addGuests([profile])) throw new Error("A guest with this identifier already exists.");
         notify("Guest added.");
@@ -123,6 +124,10 @@ function AdminDialog({ panel, close, notify }) {
             <TextField label="Identifier" name="Identifier" />
             <TextField label="Department" name="Department" />
             <ChoiceField label="Role" name="Role" options={[["staff", "Staff"], ["manager", "Manager"]]} />
+            {backendMode && (
+              <TextField label="Drink vouchers" name="Vouchers" type="number"
+                min="0" max="2147483647" step="1" defaultValue={defaultVouchers} />
+            )}
           </>
         )}
         {error && <p className="field-error" role="alert">{error}</p>}
@@ -140,7 +145,7 @@ export default function Admin() {
   const [active, setActive] = useState("guests");
   const [query, setQuery] = useState("");
   const [panel, setPanel] = useState(null);
-  const [date, setDate] = useState("today");
+  const [date, setDate] = useState(backendMode ? "all" : "today");
   const [bartender, setBartender] = useState("all");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -173,7 +178,8 @@ export default function Admin() {
   async function exportSpreadsheet() {
     setError("");
     try {
-      await downloadWorkbook([ORDER_COLUMNS, ...orderRows], "drink-pass-served-drinks.xlsx");
+      const eventId = data.event ? `-${data.event.id.slice(0, 8)}` : "";
+      await downloadWorkbook([ORDER_COLUMNS, ...orderRows], `drink-pass-served-drinks${eventId}.xlsx`);
     } catch {
       setError("Couldn’t export the spreadsheet. Try again.");
     }
@@ -183,6 +189,9 @@ export default function Admin() {
     <>
       <Screen role="Admin" className={`admin-screen admin-${active}`}>
         <div className="screen-content">
+          {data.event && (
+            <EventPicker event={data.event} events={data.events} onCreate={() => setPanel({ type: "event" })} />
+          )}
           <ScreenTitle>{TABS[active][0]}</ScreenTitle>
           {active === "guests" && (
             <>
@@ -216,6 +225,7 @@ export default function Admin() {
                   </button>
                 </li>
               ))}
+              {!data.drinks.length && <li>Add a drink to set its starting stock.</li>}
             </ul>
           )}
           {active === "orders" && (
@@ -263,6 +273,7 @@ export default function Admin() {
       {active === "orders" && (
         <section className="print-orders">
           <h1>Drink Pass · Served drinks</h1>
+          {data.event && <p>{data.event.name} · {data.event.date}</p>}
           <p>{date === "today" ? today : date === "all" ? "All dates" : date} · {bartender === "all" ? "All bartenders" : bartender}</p>
           <table>
             <thead><tr>{ORDER_COLUMNS.map((label) => <th scope="col" key={label}>{label}</th>)}</tr></thead>
@@ -272,10 +283,12 @@ export default function Admin() {
           </table>
         </section>
       )}
-      {panel && (panel.type === "edit-stock" || panel.type === "add-stock"
+      {panel?.type === "event" && <EventDialog close={() => setPanel(null)} />}
+      {panel && panel.type !== "event" && (panel.type === "edit-stock" || panel.type === "add-stock"
         ? <StockDialog action={panel.drink ? "update" : "add"} drink={panel.drink}
             notify={setNotice} close={() => setPanel(null)} />
-        : <AdminDialog panel={panel} notify={setNotice} close={() => setPanel(null)} />)}
+        : <AdminDialog panel={panel} notify={setNotice} close={() => setPanel(null)}
+            defaultVouchers={data.event?.defaultVouchers ?? INITIAL_VOUCHERS} />)}
     </>
   );
 }

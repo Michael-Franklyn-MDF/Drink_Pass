@@ -332,6 +332,7 @@ export default function Guest({ mode, role }) {
       <Screen key="welcome" role={role} className="welcome-screen">
         <div className="welcome-content">
           <img src={`/assets/brand-${mode}.svg`} alt="" width="64" height="64" />
+          {data.event && <p className="screen-description">{data.event.name}</p>}
           <ScreenTitle>Welcome</ScreenTitle>
           <p className="screen-description welcome-description">Choose a drink.<br />Show your pass at the bar.</p>
           {!manager && !backendMode && <div className="welcome-summary">{INITIAL_VOUCHERS} drink vouchers</div>}
