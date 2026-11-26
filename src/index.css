@@ -48,7 +48,7 @@ body {
   display: flex;
   min-height: 100svh;
   flex-direction: column;
-  padding: clamp(28px, 9.6svh, 82px) 24px calc(52px + env(safe-area-inset-bottom));
+  padding: clamp(24px, 5svh, 44px) 24px calc(52px + env(safe-area-inset-bottom));
 }
 
 .screen-enter {
@@ -364,21 +364,8 @@ button:disabled {
   margin-top: 18px;
 }
 
-.home-indicator {
-  position: fixed;
-  z-index: 1;
-  inset: auto 0 max(16px, env(safe-area-inset-bottom));
-  display: grid;
-  justify-items: center;
-  pointer-events: none;
-}
-
 body:has(.dialog[open]) {
   overflow: hidden;
-}
-
-.app-shell:has(.dialog[open]) .home-indicator {
-  visibility: hidden;
 }
 
 .dialog {
@@ -843,6 +830,30 @@ body:has(.dialog[open]) {
 .navigation-actions {
   display: grid;
   gap: 30px;
+}
+
+@media (max-height: 740px) {
+  .screen {
+    padding-top: clamp(20px, 4svh, 30px);
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+
+  .screen-content {
+    margin-top: 20px;
+  }
+
+  .scanner-view {
+    height: clamp(180px, 33svh, 240px);
+    margin-top: 24px;
+  }
+
+  .screen-actions {
+    padding-top: 18px;
+  }
+
+  .navigation-actions {
+    gap: 20px;
+  }
 }
 
 .export-actions {

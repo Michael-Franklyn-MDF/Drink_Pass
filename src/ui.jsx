@@ -23,9 +23,6 @@ export function Shell({ role, children }) {
   return (
     <main className={`app-shell ${role === "Manager" ? "manager-theme" : ""}`}>
       {children}
-      <div className="home-indicator" aria-hidden="true">
-        <img src={`/assets/home-${role === "Manager" ? "manager" : "staff"}.svg`} alt="" />
-      </div>
     </main>
   );
 }
