@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_svg: 2.5.1
+  material_ui: 1.11.1
   mobile_scanner: 7.5.0
 
 dev_dependencies:

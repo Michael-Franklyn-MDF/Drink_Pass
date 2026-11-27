@@ -26,7 +26,7 @@ function json(result: { status: string }, httpStatus: number): Response {
   return Response.json(result, { status: httpStatus, headers: { 'Cache-Control': 'no-store' } });
 }
 
-function signatureBytes(value: string): Uint8Array<ArrayBuffer> | null {
+function signatureBytes(value: string) {
   const base64 = value.replace(/-/g, '+').replace(/_/g, '/') + '=';
   const decoded = atob(base64);
   return btoa(decoded) === base64 ? Uint8Array.from(decoded, (char) => char.charCodeAt(0)) : null;

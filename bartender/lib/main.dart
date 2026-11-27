@@ -1,13 +1,11 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 void main() => runApp(DrinkPassApp(backend: DemoBackend()));
 
-typedef ScannerBuilder = Widget Function(
-  BuildContext context,
-  ValueChanged<String> onScanned,
-);
+typedef ScannerBuilder =
+    Widget Function(BuildContext context, ValueChanged<String> onScanned);
 
 typedef Drink = ({String id, String name});
 
@@ -48,8 +46,18 @@ class DemoBackend implements BartenderBackend {
   Future<({GuestCard card, List<Drink> drinks})> lookup(String qr) async {
     if (!online) throw const CardFailure('No connection', retryable: true);
     final card = switch (qr) {
-      staffCard => GuestCard('Alex Kamau', 'Operations', 'Blue · Staff', _remaining),
-      managerCard => const GuestCard('Sam Muli', 'Management', 'Gold · Manager', null),
+      staffCard => GuestCard(
+        'Alex Kamau',
+        'Operations',
+        'Blue · Staff',
+        _remaining,
+      ),
+      managerCard => const GuestCard(
+        'Sam Muli',
+        'Management',
+        'Gold · Manager',
+        null,
+      ),
       _ => throw const CardFailure('Card not recognized'),
     };
     return (card: card, drinks: _menu);
@@ -87,7 +95,9 @@ class DrinkPassApp extends StatelessWidget {
           foregroundColor: Colors.white,
           minimumSize: const Size.fromHeight(52),
           alignment: Alignment.centerLeft,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
       ),
@@ -173,7 +183,11 @@ class _BartenderState extends State<_Bartender> {
           fit: StackFit.expand,
           children: [
             camera(context, _scan),
-            IgnorePointer(child: Center(child: SvgPicture.asset('assets/scanner-guide.svg'))),
+            IgnorePointer(
+              child: Center(
+                child: SvgPicture.asset('assets/scanner-guide.svg'),
+              ),
+            ),
             SafeArea(
               child: Align(
                 alignment: Alignment.topLeft,
@@ -192,7 +206,8 @@ class _BartenderState extends State<_Bartender> {
         ),
       );
     }
-    if (_working) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_working)
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     if (_served != null || _refusal != null) return _result(context);
     if (_card case final card?) return _confirmScreen(card);
 
@@ -220,44 +235,54 @@ class _BartenderState extends State<_Bartender> {
           child: const Text('Enable camera'),
         ),
         if (widget.backend is DemoBackend)
-          TextButton(onPressed: () => _scan(DemoBackend.staffCard), child: const Text('Use sample card')),
+          TextButton(
+            onPressed: () => _scan(DemoBackend.staffCard),
+            child: const Text('Use sample card'),
+          ),
       ],
     );
   }
 
   Widget _camera(BuildContext context, ValueChanged<String> onScanned) {
-    return LayoutBuilder(builder: (context, size) => MobileScanner(
-      scanWindow: Rect.fromCenter(
-        center: Offset(size.maxWidth / 2, size.maxHeight / 2),
-        width: 213,
-        height: 224,
-      ),
-      onDetect: (capture) {
-        for (final barcode in capture.barcodes) {
-          final raw = barcode.rawValue;
-          if (barcode.format == BarcodeFormat.qrCode && raw != null && raw.isNotEmpty) {
-            onScanned(raw);
-            return;
+    return LayoutBuilder(
+      builder: (context, size) => MobileScanner(
+        scanWindow: Rect.fromCenter(
+          center: Offset(size.maxWidth / 2, size.maxHeight / 2),
+          width: 213,
+          height: 224,
+        ),
+        onDetect: (capture) {
+          for (final barcode in capture.barcodes) {
+            final raw = barcode.rawValue;
+            if (barcode.format == BarcodeFormat.qrCode &&
+                raw != null &&
+                raw.isNotEmpty) {
+              onScanned(raw);
+              return;
+            }
           }
-        }
-      },
-      errorBuilder: (context, error) => const Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 24),
-          child: Text(
-            'Camera unavailable. Check camera permission and try again.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white),
+        },
+        errorBuilder: (context, error) => const Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24),
+            child: Text(
+              'Camera unavailable. Check camera permission and try again.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ),
       ),
-    ));
+    );
   }
 
   Widget _confirmScreen(GuestCard card) => _Page(
     heading: 'Confirm drink',
     body: [
-      Text(card.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+      Text(
+        card.name,
+        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+      ),
       Text(card.department),
       Text(card.type),
       if (card.drinksLeft case final left?) Text('$left drinks left'),
@@ -269,7 +294,9 @@ class _BartenderState extends State<_Bartender> {
           child: ChoiceChip(
             label: Text(drink.name),
             selected: _selected == drink,
-            onSelected: card.drinksLeft == 0 ? null : (_) => setState(() => _selected = drink),
+            onSelected: card.drinksLeft == 0
+                ? null
+                : (_) => setState(() => _selected = drink),
             materialTapTargetSize: MaterialTapTargetSize.padded,
           ),
         ),
@@ -286,7 +313,9 @@ class _BartenderState extends State<_Bartender> {
   Widget _result(BuildContext context) {
     final served = _served;
     final success = served != null;
-    final foreground = success ? const Color(0xff075637) : const Color(0xff8b1d24);
+    final foreground = success
+        ? const Color(0xff075637)
+        : const Color(0xff8b1d24);
     return _Page(
       heading: 'Scan result',
       body: [
@@ -295,25 +324,45 @@ class _BartenderState extends State<_Bartender> {
           child: Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: success ? const Color(0xffddf4e7) : const Color(0xffffe6e7),
+              color: success
+                  ? const Color(0xffddf4e7)
+                  : const Color(0xffffe6e7),
               borderRadius: BorderRadius.circular(18),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(success ? Icons.check : Icons.close, color: foreground, size: 32),
+                Icon(
+                  success ? Icons.check : Icons.close,
+                  color: foreground,
+                  size: 32,
+                ),
                 const SizedBox(height: 20),
                 Text(
                   success ? 'Serve this drink' : _refusal!.reason,
-                  style: TextStyle(color: foreground, fontWeight: FontWeight.bold, fontSize: 27),
+                  style: TextStyle(
+                    color: foreground,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 27,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 if (served != null) ...[
-                  Text(served.drink, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+                  Text(
+                    served.drink,
+                    style: const TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   Text(served.guest),
-                  Text('Scanned ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(served.time.toLocal()))}'),
+                  Text(
+                    'Scanned ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(served.time.toLocal()))}',
+                  ),
                 ] else if (_retry != null)
-                  const Text('Check your connection and try again before serving.')
+                  const Text(
+                    'Check your connection and try again before serving.',
+                  )
                 else
                   const Text('Do not serve a drink.'),
               ],
@@ -322,14 +371,21 @@ class _BartenderState extends State<_Bartender> {
         ),
       ],
       actions: [
-        FilledButton(onPressed: _retry ?? _next, child: Text(_retry == null ? 'Scan next' : 'Try again')),
+        FilledButton(
+          onPressed: _retry ?? _next,
+          child: Text(_retry == null ? 'Scan next' : 'Try again'),
+        ),
       ],
     );
   }
 }
 
 class _Page extends StatelessWidget {
-  const _Page({required this.heading, required this.body, required this.actions});
+  const _Page({
+    required this.heading,
+    required this.body,
+    required this.actions,
+  });
   final String heading;
   final List<Widget> body;
   final List<Widget> actions;
@@ -345,15 +401,27 @@ class _Page extends StatelessWidget {
             const Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Drink Pass', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-                Text('Bartender', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  'Drink Pass',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                ),
+                Text(
+                  'Bartender',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ],
             ),
             const SizedBox(height: 26),
             Expanded(
               child: ListView(
                 children: [
-                  Text(heading, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 34)),
+                  Text(
+                    heading,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 34,
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   ...body,
                 ],
