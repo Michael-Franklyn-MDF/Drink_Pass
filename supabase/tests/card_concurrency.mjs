@@ -32,13 +32,12 @@ async function query(sql, applicationName) {
 const event = randomUUID();
 const guest = randomUUID();
 const card = randomUUID();
-const drink = randomUUID();
 const firstKey = randomBytes(32).toString('hex');
 const secondKey = randomBytes(32).toString('hex');
 const secondApplication = 'card-race-' + randomUUID();
 
 function redeem(key) {
-  return `select public.drink_pass_card_redeem('${key}', '${card}', '${drink}', '${randomUUID()}')->>'status';`;
+  return `select public.drink_pass_card_redeem('${key}', '${card}', '${randomUUID()}')->>'status';`;
 }
 
 await query(`
@@ -48,9 +47,8 @@ await query(`
   insert into drink_pass.guests (id, event_id, full_name, identifier, identifier_type, department, role, allowance, remaining)
     values ('${guest}', '${event}', 'Test Guest', 'RACE', 'Staff ID', 'Test', 'staff', 5, 5);
   insert into drink_pass.cards (id, event_id, guest_id, card_type) values ('${card}', '${event}', '${guest}', 'blue');
-  insert into drink_pass.card_drinks (id, event_id, name) values ('${drink}', '${event}', 'Tonic');
-  insert into drink_pass.devices (event_id, label, bar, key_hash) values
-    ('${event}', 'Phone A', 'Bar 1', '${firstKey}'), ('${event}', 'Phone B', 'Bar 2', '${secondKey}');
+  insert into drink_pass.devices (event_id, label, bartender_name, bar, key_hash) values
+    ('${event}', 'Phone A', 'Amina', 'Bar 1', '${firstKey}'), ('${event}', 'Phone B', 'Brian', 'Bar 2', '${secondKey}');
 `);
 
 const first = spawn('psql', psql, { env, stdio: ['pipe', 'pipe', 'inherit'] });
@@ -90,7 +88,6 @@ try {
     delete from drink_pass.redemptions where event_id = '${event}';
     delete from drink_pass.devices where event_id = '${event}';
     delete from drink_pass.cards where event_id = '${event}';
-    delete from drink_pass.card_drinks where event_id = '${event}';
     delete from drink_pass.guests where event_id = '${event}';
     delete from drink_pass.card_events where event_id = '${event}';
     delete from drink_pass.events where id = '${event}';

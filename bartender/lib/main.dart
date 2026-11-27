@@ -7,11 +7,16 @@ void main() => runApp(DrinkPassApp(backend: DemoBackend()));
 typedef ScannerBuilder =
     Widget Function(BuildContext context, ValueChanged<String> onScanned);
 
-typedef Drink = ({String id, String name});
-
 class GuestCard {
-  const GuestCard(this.name, this.department, this.type, this.drinksLeft);
+  const GuestCard(
+    this.name,
+    this.staffId,
+    this.department,
+    this.type,
+    this.drinksLeft,
+  );
   final String name;
+  final String? staffId;
   final String department;
   final String type;
   final int? drinksLeft;
@@ -23,49 +28,45 @@ class CardFailure implements Exception {
   final bool retryable;
 }
 
-typedef ServedDrink = ({String guest, String drink, DateTime time});
+typedef ServedDrink = ({String guest, String? staffId, DateTime time});
 
 abstract interface class BartenderBackend {
-  Future<({GuestCard card, List<Drink> drinks})> lookup(String qr);
-  Future<ServedDrink> redeem(String qr, Drink drink);
+  Future<GuestCard> lookup(String qr);
+  Future<ServedDrink> redeem(String qr);
 }
 
 class DemoBackend implements BartenderBackend {
   static const staffCard = 'drink-pass-demo-staff';
   static const managerCard = 'drink-pass-demo-manager';
-  static const _menu = [
-    (id: 'ginger', name: 'Ginger beer'),
-    (id: 'water', name: 'Sparkling water'),
-  ];
-
   final _lastServed = <String, DateTime>{};
   int _remaining = 5;
   bool online = true;
 
   @override
-  Future<({GuestCard card, List<Drink> drinks})> lookup(String qr) async {
+  Future<GuestCard> lookup(String qr) async {
     if (!online) throw const CardFailure('No connection', retryable: true);
-    final card = switch (qr) {
+    return switch (qr) {
       staffCard => GuestCard(
         'Alex Kamau',
+        'STF-042',
         'Operations',
         'Blue · Staff',
         _remaining,
       ),
       managerCard => const GuestCard(
         'Sam Muli',
+        'MGR-001',
         'Management',
         'Gold · Manager',
         null,
       ),
       _ => throw const CardFailure('Card not recognized'),
     };
-    return (card: card, drinks: _menu);
   }
 
   @override
-  Future<ServedDrink> redeem(String qr, Drink drink) async {
-    final guest = (await lookup(qr)).card;
+  Future<ServedDrink> redeem(String qr) async {
+    final guest = await lookup(qr);
     final now = DateTime.now();
     final last = _lastServed[qr];
     if (last != null && now.difference(last) < const Duration(minutes: 5)) {
@@ -74,7 +75,7 @@ class DemoBackend implements BartenderBackend {
     if (guest.drinksLeft == 0) throw const CardFailure('No drinks left');
     if (qr == staffCard) _remaining -= 1;
     _lastServed[qr] = now;
-    return (guest: guest.name, drink: drink.name, time: now);
+    return (guest: guest.name, staffId: guest.staffId, time: now);
   }
 }
 
@@ -119,8 +120,6 @@ class _BartenderState extends State<_Bartender> {
   bool _scanning = false;
   bool _working = false;
   GuestCard? _card;
-  List<Drink> _drinks = [];
-  Drink? _selected;
   ServedDrink? _served;
   CardFailure? _refusal;
   Future<void> Function()? _retry;
@@ -152,21 +151,18 @@ class _BartenderState extends State<_Bartender> {
     if (!mounted) return;
     setState(() {
       _qr = qr;
-      _card = found.card;
-      _drinks = found.drinks;
-      _selected = null;
+      _card = found;
     });
   });
 
   Future<void> _confirm() => _run(() async {
-    final result = await widget.backend.redeem(_qr!, _selected!);
+    final result = await widget.backend.redeem(_qr!);
     if (mounted) setState(() => _served = result);
   });
 
   void _next() => setState(() {
     _qr = null;
     _card = null;
-    _selected = null;
     _served = null;
     _refusal = null;
     _retry = null;
@@ -283,27 +279,14 @@ class _BartenderState extends State<_Bartender> {
         card.name,
         style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
       ),
+      if (card.staffId case final id?) Text('Staff ID $id'),
       Text(card.department),
       Text(card.type),
       if (card.drinksLeft case final left?) Text('$left drinks left'),
-      const SizedBox(height: 24),
-      if (_drinks.isEmpty) const Text('No drinks are available.'),
-      for (final drink in _drinks)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: ChoiceChip(
-            label: Text(drink.name),
-            selected: _selected == drink,
-            onSelected: card.drinksLeft == 0
-                ? null
-                : (_) => setState(() => _selected = drink),
-            materialTapTargetSize: MaterialTapTargetSize.padded,
-          ),
-        ),
     ],
     actions: [
       FilledButton(
-        onPressed: _selected == null ? null : _confirm,
+        onPressed: card.drinksLeft == 0 ? null : _confirm,
         child: const Text('Confirm drink'),
       ),
       TextButton(onPressed: _next, child: const Text('Scan another card')),
@@ -339,7 +322,7 @@ class _BartenderState extends State<_Bartender> {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  success ? 'Serve this drink' : _refusal!.reason,
+                  success ? 'Drink recorded' : _refusal!.reason,
                   style: TextStyle(
                     color: foreground,
                     fontWeight: FontWeight.bold,
@@ -348,14 +331,8 @@ class _BartenderState extends State<_Bartender> {
                 ),
                 const SizedBox(height: 12),
                 if (served != null) ...[
-                  Text(
-                    served.drink,
-                    style: const TextStyle(
-                      fontSize: 19,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
                   Text(served.guest),
+                  if (served.staffId case final id?) Text('Staff ID $id'),
                   Text(
                     'Scanned ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(served.time.toLocal()))}',
                   ),

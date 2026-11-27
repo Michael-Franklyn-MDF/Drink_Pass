@@ -1,7 +1,7 @@
 # Drink Pass bartender
 
-The current Flutter app runs with a demo backend. It exercises the Scan, Confirm,
-Result, and connection retry screens. Demo drinks are stored only in memory.
+The current Flutter app runs with a demo backend. Scan a card, check the guest's
+name and staff ID, then tap **Confirm drink** once. Demo counts are stored only in memory.
 
 From this directory, run:
 

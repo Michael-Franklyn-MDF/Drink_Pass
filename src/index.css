@@ -523,6 +523,19 @@ body:has(.dialog[open]) {
   display: none;
 }
 
+.card-orders {
+  margin-top: 1rem;
+}
+
+.card-orders h2 {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.card-orders p {
+  color: var(--muted);
+}
+
 .loading {
   padding: 24px;
 }

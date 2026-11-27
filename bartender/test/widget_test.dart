@@ -12,16 +12,16 @@ void main() {
 
       expect(find.text('Alex Kamau'), findsOneWidget);
       expect(find.text('5 drinks left'), findsOneWidget);
-      expect(find.text('Serve this drink'), findsNothing);
+      expect(find.text('Drink recorded'), findsNothing);
 
-      await tester.tap(find.text('Ginger beer'));
-      await tester.pump();
+      expect(find.text('Staff ID STF-042'), findsOneWidget);
+      expect(find.byType(ChoiceChip), findsNothing);
       await tester.tap(find.widgetWithText(FilledButton, 'Confirm drink'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Serve this drink'), findsOneWidget);
+      expect(find.text('Drink recorded'), findsOneWidget);
       expect(find.text('Alex Kamau'), findsOneWidget);
-      expect(find.text('Ginger beer'), findsOneWidget);
+      expect(find.text('Staff ID STF-042'), findsOneWidget);
       expect(find.textContaining('Scanned '), findsOneWidget);
 
       await tester.tap(find.text('Scan next'));
@@ -37,7 +37,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No connection'), findsOneWidget);
-    expect(find.text('Serve this drink'), findsNothing);
+    expect(find.text('Drink recorded'), findsNothing);
 
     backend.online = true;
     await tester.tap(find.text('Try again'));
@@ -86,6 +86,6 @@ void main() {
     expect(find.text('Card not recognized'), findsOneWidget);
     expect(find.text('Do not serve a drink.'), findsOneWidget);
     expect(find.text('Scan next'), findsOneWidget);
-    expect(find.text('Serve this drink'), findsNothing);
+    expect(find.text('Drink recorded'), findsNothing);
   });
 }

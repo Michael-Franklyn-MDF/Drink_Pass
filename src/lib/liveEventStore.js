@@ -73,8 +73,6 @@ export const setStock = (id, stock) => updateStock("set", { id, stock });
 export const restockDrink = (id, stock) => updateStock("restock", { id, stock });
 export const setDrinkEnabled = (id, enabled) => updateStock("enable", { id, enabled });
 
-export const addCardDrink = (name) => update("card_menu", { p_action: "add", p_values: { name } });
-export const setCardDrinkEnabled = (id, enabled) => update("card_menu", { p_action: "enable", p_values: { id, enabled } });
 
 export function scanVoucher(code, _bartender, online = navigator.onLine) {
   if (!online) return Promise.resolve({ status: "offline" });

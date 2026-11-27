@@ -4,13 +4,13 @@ import {
 } from "./eventStore.js";
 import BottomNav from "./BottomNav.jsx";
 import { EventDialog, EventPicker } from "./AdminEventSetup.jsx";
-import { addCardDrink, setCardDrinkEnabled } from "./lib/liveEventStore.js";
+import { cardReport, cardReportSheets, COUNT_COLUMNS, DETAIL_COLUMNS } from "./cardReport.js";
 import StockDialog from "./StockDialog.jsx";
 import { Dialog, Screen, ScreenTitle, TextField } from "./ui.jsx";
 
 const TABS = { guests: ["Guest list", "Guests"], stock: ["Drinks and stock", "Stock"], orders: ["Served drinks", "Orders"] };
 const ADMIN_NAV_TABS = Object.entries(TABS).map(([id, [, label]]) => ({ id, label }));
-const CARD_NAV_TABS = ADMIN_NAV_TABS.map((tab) => tab.id === "stock" ? { ...tab, label: "Drinks" } : tab);
+const CARD_NAV_TABS = ADMIN_NAV_TABS.filter(({ id }) => id !== "stock");
 const IMPORT_COLUMNS = ["Full name", "Identifier", "Department", "Guest type", "Identifier type", "Drink allowance"];
 const LEGACY_COLUMNS = { "guest type": "role", "drink allowance": "vouchers" };
 const ORDER_COLUMNS = ["Drink", "Guest", "Date", "Time", "Bartender"];
@@ -26,27 +26,28 @@ function ChoiceField({ label, name, options, ...props }) {
   );
 }
 
-function guestProfile(values, defaultVouchers) {
+function guestProfile(values, defaultVouchers, cardEvent) {
   const fullName = String(values["Full name"] ?? "").trim();
-  const identifier = String(values.Identifier ?? "").trim();
+  const identifier = String(values["Staff ID"] ?? values.Identifier ?? "").trim();
   const department = String(values.Department ?? "").trim();
   const role = String(values["Guest type"] ?? "staff").trim().toLowerCase() || "staff";
   const inputType = String(values["Identifier type"] ?? "").trim().toLowerCase() || "staff id";
   const identifierType = IDENTIFIER_TYPES.find((type) => type.toLowerCase() === inputType);
   const allowance = values["Drink allowance"];
   const remaining = role === "manager" || String(allowance ?? "").trim() === "" ? defaultVouchers : Number(allowance);
-  if (!fullName || !identifier || !department || !identifierType ||
+  if (!fullName || !identifier || !department || !identifierType || (cardEvent && identifierType !== "Staff ID") ||
       !["staff", "manager"].includes(role) || !Number.isInteger(remaining) || remaining < 0 || remaining > 2147483647) return null;
   return { fullName, identifier, department, role, identifierType, remaining };
 }
 
-async function readGuests(file, defaultVouchers) {
+async function readGuests(file, defaultVouchers, cardEvent) {
   const { readSheet } = await import("read-excel-file/browser");
   const rows = await readSheet(file, 1);
   const [headings, ...body] = rows;
   const columns = headings?.map((value) => String(value ?? "").trim().toLowerCase()) ?? [];
-  if (!IMPORT_COLUMNS.slice(0, 3).every((key) => columns.includes(key.toLowerCase()))) {
-    throw new Error("Include Full name, Identifier and Department columns in the first row.");
+  if (!columns.includes("full name") || !columns.includes("department") ||
+      !(columns.includes("identifier") || columns.includes("staff id"))) {
+    throw new Error(`Include Full name, ${cardEvent ? "Staff ID" : "Identifier"} and Department columns in the first row.`);
   }
   const profiles = [];
   for (const [index, row] of body.entries()) {
@@ -56,7 +57,8 @@ async function readGuests(file, defaultVouchers) {
       const column = columns.includes(heading) ? heading : LEGACY_COLUMNS[heading];
       return [key, row[columns.indexOf(column)]];
     }));
-    const profile = guestProfile(values, defaultVouchers);
+    values["Staff ID"] = row[columns.indexOf("staff id")];
+    const profile = guestProfile(values, defaultVouchers, cardEvent);
     if (!profile) throw new Error(`Check guest details on row ${index + 2}.`);
     profiles.push(profile);
   }
@@ -64,12 +66,12 @@ async function readGuests(file, defaultVouchers) {
   return profiles;
 }
 
-async function downloadWorkbook(rows, name) {
+async function downloadWorkbook(data, name) {
   const { default: writeWorkbook } = await import("write-excel-file/browser");
-  await writeWorkbook(rows).toFile(name);
+  await writeWorkbook(data).toFile(name);
 }
 
-function AdminDialog({ panel, close, notify, defaultVouchers }) {
+function AdminDialog({ panel, close, notify, defaultVouchers, cardEvent }) {
   const isImport = panel.type === "import";
   const title = isImport ? "Import guests" : "Add guest";
   const [error, setError] = useState("");
@@ -86,7 +88,7 @@ function AdminDialog({ panel, close, notify, defaultVouchers }) {
       if (isImport) {
         let profiles;
         try {
-          profiles = await readGuests(values.workbook, defaultVouchers);
+          profiles = await readGuests(values.workbook, defaultVouchers, cardEvent);
         } catch (issue) {
           const message = issue.message;
           throw new Error(/^(Include|Check guest details|The spreadsheet)/.test(message)
@@ -95,7 +97,7 @@ function AdminDialog({ panel, close, notify, defaultVouchers }) {
         const added = await addGuests(profiles);
         notify(`${added} imported. ${profiles.length - added} duplicates skipped.`);
       } else {
-        const profile = guestProfile(values, defaultVouchers);
+        const profile = guestProfile(values, defaultVouchers, cardEvent);
         if (!profile) throw new Error("Complete the guest details.");
         if (!await addGuests([profile])) throw new Error("A guest with this identifier already exists.");
         notify("Guest added.");
@@ -120,7 +122,11 @@ function AdminDialog({ panel, close, notify, defaultVouchers }) {
               accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
             <button type="button" className="text-link" onClick={async () => {
               try {
-                await downloadWorkbook([IMPORT_COLUMNS], "drink-pass-guest-template.xlsx");
+                const columns = cardEvent
+                  ? IMPORT_COLUMNS.filter((column) => column !== "Identifier type")
+                    .map((column) => column === "Identifier" ? "Staff ID" : column)
+                  : IMPORT_COLUMNS;
+                await downloadWorkbook([columns], "drink-pass-guest-template.xlsx");
               } catch {
                 setError("Couldn’t download the template.");
               }
@@ -129,8 +135,10 @@ function AdminDialog({ panel, close, notify, defaultVouchers }) {
         ) : (
           <>
             <TextField label="Full name" name="Full name" />
-            <ChoiceField label="Identifier type" name="Identifier type" options={IDENTIFIER_TYPES.map((type) => [type, type])} />
-            <TextField label="Identifier" name="Identifier" />
+            {!cardEvent && (
+              <ChoiceField label="Identifier type" name="Identifier type" options={IDENTIFIER_TYPES.map((type) => [type, type])} />
+            )}
+            <TextField label={cardEvent ? "Staff ID" : "Identifier"} name={cardEvent ? "Staff ID" : "Identifier"} />
             <TextField label="Department" name="Department" />
             <ChoiceField label="Guest type" name="Guest type" value={guestType}
               onChange={(event) => setGuestType(event.target.value)} options={[["staff", "Staff"], ["manager", "Manager"]]} />
@@ -152,7 +160,7 @@ function AdminDialog({ panel, close, notify, defaultVouchers }) {
 
 export default function Admin() {
   const data = useEvent();
-  const cardEvent = data.event?.usesCards === true;
+  const cardEvent = !backendMode || data.event?.usesCards === true;
   const [active, setActive] = useState("guests");
   const [query, setQuery] = useState("");
   const [panel, setPanel] = useState(null);
@@ -160,7 +168,6 @@ export default function Admin() {
   const [bartender, setBartender] = useState("all");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [updatingDrink, setUpdatingDrink] = useState(null);
   const today = localDate(Date.now());
   const dates = [...new Set(data.orders.map((order) => localDate(order.scannedAt)))].sort().reverse();
   const bartenders = [...new Set(data.orders.map((order) => order.bartender))].sort();
@@ -175,24 +182,14 @@ export default function Admin() {
     order.drink, order.guest.fullName,
     localDate(order.scannedAt), formatTime(order.scannedAt), order.bartender,
   ]);
-
-  async function toggleCardDrink(drink) {
-    setError("");
-    setUpdatingDrink(drink.id);
-    try {
-      await setCardDrinkEnabled(drink.id, !drink.active);
-    } catch (issue) {
-      setError(issue.message || "Couldn’t update the drink.");
-    } finally {
-      setUpdatingDrink(null);
-    }
-  }
+  const report = cardEvent ? cardReport(orders) : null;
 
   async function exportSpreadsheet() {
     setError("");
     try {
       const eventId = data.event ? `-${data.event.id.slice(0, 8)}` : "";
-      await downloadWorkbook([ORDER_COLUMNS, ...orderRows], `drink-pass-served-drinks${eventId}.xlsx`);
+      await downloadWorkbook(report ? cardReportSheets(report) : [ORDER_COLUMNS, ...orderRows],
+        `drink-pass-served-drinks${eventId}.xlsx`);
     } catch {
       setError("Couldn’t export the spreadsheet. Try again.");
     }
@@ -205,7 +202,7 @@ export default function Admin() {
           {data.event && (
             <EventPicker event={data.event} events={data.events} onCreate={() => setPanel({ type: "event" })} />
           )}
-          <ScreenTitle>{cardEvent && active === "stock" ? "Drink menu" : TABS[active][0]}</ScreenTitle>
+          <ScreenTitle>{TABS[active][0]}</ScreenTitle>
           {active === "guests" && (
             <>
               <div className="admin-search">
@@ -227,22 +224,12 @@ export default function Admin() {
             <ul className="admin-list">
               {data.drinks.map((drink) => (
                 <li key={drink.id}>
-                  {cardEvent ? (
-                    <>
-                      <span>{drink.name} · {drink.active ? "Enabled" : "Disabled"}</span>
-                      <button type="button" className="text-link" disabled={updatingDrink !== null}
-                        onClick={() => toggleCardDrink(drink)}>
-                        {drink.active ? "Disable" : "Enable"} {drink.name}
-                      </button>
-                    </>
-                  ) : (
-                    <button onClick={() => setPanel({ type: "edit-stock", drink })}>
-                      {drink.name} · {drink.stock} {drink.stock === 1 ? "bottle" : "bottles"}
-                    </button>
-                  )}
+                  <button onClick={() => setPanel({ type: "edit-stock", drink })}>
+                    {drink.name} · {drink.stock} {drink.stock === 1 ? "bottle" : "bottles"}
+                  </button>
                 </li>
               ))}
-              {!data.drinks.length && <li>{cardEvent ? "No drinks on the menu." : "Add a drink to set its starting stock."}</li>}
+              {!data.drinks.length && <li>Add a drink to set its starting stock.</li>}
             </ul>
           )}
           {active === "orders" && (
@@ -258,14 +245,27 @@ export default function Admin() {
                   {bartenders.map((name) => <option key={name} value={name}>{name}</option>)}
                 </select>
               </div>
-              <ul className="admin-list order-list">
+              {report ? report.map(({ role, title, total, detailRows }) => (
+                <section className="card-orders" key={role} aria-label={title}>
+                  <h2>{title}</h2>
+                  <p>{total} {total === 1 ? "drink" : "drinks"}</p>
+                  <ul className="admin-list order-list">
+                    {detailRows.map(([name, staffId, bartenderName, orderDate, time], index) => (
+                      <li key={index}>
+                        <div>{name}{staffId && ` · ${staffId}`}</div>
+                        <div>{bartenderName} · {orderDate} · {time}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )) : <ul className="admin-list order-list">
                 {orders.map((order) => (
                   <li key={order.id}>
                     <div>{order.drink} · {formatTime(order.scannedAt)}</div>
                     <div>{order.guest.fullName}{order.guest.identifier && ` · ${order.guest.identifier}`}</div>
                   </li>
                 ))}
-              </ul>
+              </ul>}
               {!orders.length && <p className="screen-description">No served drinks match these filters.</p>}
             </>
           )}
@@ -292,21 +292,33 @@ export default function Admin() {
           <h1>Drink Pass · Served drinks</h1>
           {data.event && <p>{data.event.name} · {data.event.date}</p>}
           <p>{date === "today" ? today : date === "all" ? "All dates" : date} · {bartender === "all" ? "All bartenders" : bartender}</p>
-          <table>
-            <thead><tr>{ORDER_COLUMNS.map((label) => <th scope="col" key={label}>{label}</th>)}</tr></thead>
-            <tbody>{orderRows.map((row, index) => (
-              <tr key={orders[index].id}>{row.map((cell, column) => <td key={ORDER_COLUMNS[column]}>{cell}</td>)}</tr>
-            ))}</tbody>
-          </table>
+          {report ? report.map(({ role, title, total, countRows, detailRows }) => (
+            <section className="card-orders" key={role}>
+              <h2>{title}</h2>
+              <p>Total drinks {total}</p>
+              <ReportTable columns={COUNT_COLUMNS} rows={countRows} />
+              <ReportTable columns={DETAIL_COLUMNS} rows={detailRows} />
+            </section>
+          )) : <ReportTable columns={ORDER_COLUMNS} rows={orderRows} />}
         </section>
       )}
       {panel?.type === "event" && <EventDialog close={() => setPanel(null)} />}
       {panel && panel.type !== "event" && (panel.type === "edit-stock" || panel.type === "add-stock"
         ? <StockDialog action={panel.drink ? "update" : "add"} drink={panel.drink}
-            addMenuDrink={cardEvent ? addCardDrink : undefined}
             notify={setNotice} close={() => setPanel(null)} />
         : <AdminDialog panel={panel} notify={setNotice} close={() => setPanel(null)}
-            defaultVouchers={data.event?.defaultVouchers ?? INITIAL_VOUCHERS} />)}
+            defaultVouchers={data.event?.defaultVouchers ?? INITIAL_VOUCHERS} cardEvent={cardEvent} />)}
     </>
+  );
+}
+
+function ReportTable({ columns, rows }) {
+  return (
+    <table>
+      <thead><tr>{columns.map((label) => <th scope="col" key={label}>{label}</th>)}</tr></thead>
+      <tbody>{rows.map((row, index) => (
+        <tr key={index}>{row.map((cell, column) => <td key={columns[column]}>{cell}</td>)}</tr>
+      ))}</tbody>
+    </table>
   );
 }

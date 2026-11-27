@@ -8,7 +8,6 @@ const deviceKey = Buffer.alloc(32, 29).toString('base64url');
 const keyHash = createHash('sha256').update(deviceKey).digest('hex');
 const card = '11111111-1111-4111-8111-111111111111';
 const otherCard = '11111111-1111-4111-8111-111111111112';
-const drink = '22222222-2222-4222-8222-222222222222';
 const requestId = '33333333-3333-4333-8333-333333333333';
 const signature = createHmac('sha256', Buffer.from(signingKey, 'hex')).update('v1.' + card).digest('base64url');
 const payload = 'v1.' + card + '.' + signature;
@@ -41,11 +40,11 @@ test('tampered, wrongly signed and unsupported QR codes never reach the RPC as v
   ];
   const handler = createCardHandler('redeem', signingKey, async (name, params) => {
     assert.equal(name, 'drink_pass_card_redeem');
-    assert.deepEqual(params, { p_card: null, p_key_hash: keyHash, p_drink: drink, p_request: requestId });
+    assert.deepEqual(params, { p_card: null, p_key_hash: keyHash, p_request: requestId });
     return { status: 'invalid_signature' };
   });
   for (const qr of badQrs) {
-    const response = await handler(request({ qr, drinkId: drink, requestId }));
+    const response = await handler(request({ qr, requestId }));
     assert.equal(response.status, 422);
     assert.deepEqual(await response.json(), { status: 'invalid_signature' });
   }
@@ -54,10 +53,10 @@ test('tampered, wrongly signed and unsupported QR codes never reach the RPC as v
 test('redeem forwards a stable request ID and returns the database outcome', async () => {
   const handler = createCardHandler('redeem', signingKey, async (name, params) => {
     assert.equal(name, 'drink_pass_card_redeem');
-    assert.deepEqual(params, { p_card: card, p_key_hash: keyHash, p_drink: drink, p_request: requestId });
+    assert.deepEqual(params, { p_card: card, p_key_hash: keyHash, p_request: requestId });
     return { status: 'already_redeemed' };
   });
-  const response = await handler(request({ qr: payload, drinkId: drink, requestId }));
+  const response = await handler(request({ qr: payload, requestId }));
   assert.equal(response.status, 409);
   assert.deepEqual(await response.json(), { status: 'already_redeemed' });
 });
@@ -72,7 +71,7 @@ test('malformed requests never call the database and infrastructure failures are
   assert.equal((await handler(request({ qr: payload }, ''))).status, 401);
   assert.equal((await handler(new Request('https://example.invalid'))).status, 405);
   assert.equal(calls, 0);
-  const unavailable = await handler(request({ qr: payload, drinkId: drink, requestId }));
+  const unavailable = await handler(request({ qr: payload, requestId }));
   assert.equal(unavailable.status, 503);
   assert.deepEqual(await unavailable.json(), { status: 'service_unavailable' });
 });

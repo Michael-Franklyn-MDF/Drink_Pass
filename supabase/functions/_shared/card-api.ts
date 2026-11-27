@@ -18,7 +18,6 @@ const statusCodes: Record<string, number> = {
   no_drinks_left: 409,
   cooldown_active: 409,
   already_redeemed: 409,
-  drink_unavailable: 409,
   request_conflict: 409,
 };
 
@@ -62,7 +61,7 @@ export function createCardHandler(action: Action, signingSecret: string, invoke:
     if (!body || typeof body.qr !== 'string' || body.qr.length > 128) {
       return json({ status: 'invalid_request' }, 400);
     }
-    if (action === 'redeem' && (!isUuid(body.drinkId) || !isUuid(body.requestId))) {
+    if (action === 'redeem' && !isUuid(body.requestId)) {
       return json({ status: 'invalid_request' }, 400);
     }
 
@@ -76,7 +75,6 @@ export function createCardHandler(action: Action, signingSecret: string, invoke:
         p_key_hash: Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, '0')).join(''),
       };
       if (action === 'redeem') {
-        params.p_drink = body.drinkId;
         params.p_request = body.requestId;
       }
       const result = await invoke('drink_pass_card_' + action, params);

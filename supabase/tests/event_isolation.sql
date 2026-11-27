@@ -8,8 +8,8 @@ declare
   second_event uuid := gen_random_uuid();
   first_guest uuid;
   card_id uuid := gen_random_uuid();
-  tonic_id uuid;
   device_hash text := repeat('e', 64);
+  manager_card uuid := gen_random_uuid();
   rehearsal jsonb;
   state jsonb;
   profiles jsonb := '[
@@ -62,36 +62,49 @@ begin
     raise exception 'Admin must manage staff and manager guests independently per event';
   end if;
 
-  perform public.drink_pass_card_menu('add', '{"name":"Tonic"}', first_event);
-  perform public.drink_pass_card_menu('add', '{"name":"Lime"}', second_event);
+  if to_regprocedure('public.drink_pass_card_menu(text,jsonb,uuid)') is not null then
+    raise exception 'Card events must not offer a drink menu';
+  end if;
+  begin
+    perform public.drink_pass_approve(
+      jsonb_build_array((profiles->0) || '{"identifier":"0712345678","identifierType":"Phone number"}'),
+      first_event
+    );
+    raise exception using message = 'Card events accepted a phone number as a staff ID.', errcode = '23514';
+  exception when raise_exception then null;
+  end;
+
   state := public.drink_pass_state('admin', p_event => first_event);
-  tonic_id := (state->'drinks'->0->>'id')::uuid;
-  if tonic_id is null or state->'drinks'->0 ? 'stock' or state->'drinks'->0->>'active' is distinct from 'true'
+  if state->'drinks' <> '[]'::jsonb
     or exists (select 1 from jsonb_array_elements(state->'guests') g where g ? 'invite')
     or state->'guests'->0->>'remaining' is not null or state->'guests'->1->>'remaining' is distinct from '5' then
-    raise exception 'Card event Admin state must show a stock-free menu, balances and no invitation codes';
+    raise exception 'Card event Admin state must show only guest balances';
   end if;
-
-  perform public.drink_pass_card_menu('enable', jsonb_build_object('id', tonic_id, 'enabled', false), first_event);
-  if public.drink_pass_state('admin', p_event => first_event)->'drinks'->0->>'active' is distinct from 'false' then
-    raise exception 'Admin could not disable a card-menu drink';
-  end if;
-  perform public.drink_pass_card_menu('enable', jsonb_build_object('id', tonic_id, 'enabled', true), first_event);
 
   first_guest := (state->'guests'->1->>'id')::uuid;
-  insert into drink_pass.cards (id, event_id, guest_id, card_type) values (card_id, first_event, first_guest, 'blue');
-  insert into drink_pass.devices (event_id, label, bar, key_hash) values (first_event, 'Phone A', 'Bar 1', device_hash);
-  if public.drink_pass_card_redeem(device_hash, card_id, tonic_id, gen_random_uuid())->>'status' is distinct from 'accepted' then
-    raise exception 'Card redemption failed';
+  insert into drink_pass.cards (id, event_id, guest_id, card_type) values
+    (card_id, first_event, first_guest, 'blue'),
+    (manager_card, first_event, (state->'guests'->0->>'id')::uuid, 'gold');
+  insert into drink_pass.devices (event_id, label, bartender_name, bar, key_hash)
+    values (first_event, 'Phone A', 'Amina', 'Bar 1', device_hash);
+  if public.drink_pass_card_redeem(device_hash, card_id, gen_random_uuid())->>'status' is distinct from 'accepted'
+    or public.drink_pass_card_redeem(device_hash, manager_card, gen_random_uuid())->>'status' is distinct from 'accepted' then
+    raise exception 'Card redemption must work without a configured drink';
   end if;
+
+  update drink_pass.devices set bartender_name = 'Second shift' where key_hash = device_hash;
   state := public.drink_pass_state('admin', p_event => first_event);
-  if jsonb_array_length(state->'orders') <> 1
-    or state->'orders'->0->'guest' is distinct from '{"fullName":"Staff Guest"}'::jsonb
+  if jsonb_array_length(state->'orders') <> 2
+    or not exists (select 1 from jsonb_array_elements(state->'orders') o
+      where o->'guest'->>'fullName' = 'Staff Guest' and o->'guest'->>'staffId' = 'E-STF'
+        and o->'guest'->>'role' = 'staff' and o->>'bartender' = 'Amina' and not o ? 'drink')
+    or not exists (select 1 from jsonb_array_elements(state->'orders') o
+      where o->'guest'->>'staffId' = 'E-MGR' and o->'guest'->>'role' = 'manager')
     or state->'guests'->1->>'remaining' is distinct from '4' then
-    raise exception 'Admin must see successful card orders and the resulting balance';
+    raise exception 'Admin must see both guest types and the original bartender attribution';
   end if;
   state := public.drink_pass_state('admin', p_event => second_event);
-  if state->'orders' <> '[]'::jsonb or state->'drinks'->0->>'name' is distinct from 'Lime'
+  if state->'orders' <> '[]'::jsonb or state->'drinks' <> '[]'::jsonb
     or state->'guests'->1->>'remaining' is distinct from '5' then
     raise exception 'Card activity changed another event';
   end if;
