@@ -4,20 +4,14 @@ import { getAppRole, isDemoMode } from "../ui.jsx";
 import { supabase } from "./supabaseClient.js";
 
 const params = new URLSearchParams(window.location.search);
-export const backendMode = params.get("backend") === "1" && !isDemoMode();
 const role = getAppRole();
+export const backendMode = role !== "cards" && params.get("backend") === "1" && !isDemoMode();
 const eventId = params.get("event");
-const sessionKey = `drink-pass-guest-session-${role}${eventId ? `-${eventId}` : ""}`;
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
-const empty = { guests: [], drinks: [], vouchers: {}, orders: [], sessions: {} };
+const empty = { guests: [], drinks: [], orders: [] };
 const listeners = new Set();
 let state = empty;
 let version = 0;
-
-function getSessionId() {
-  const session = localStorage.getItem(sessionKey);
-  return uuid.test(session ?? "") ? session : null;
-}
 
 async function rpc(operation, args) {
   if (!supabase) throw new Error("Supabase is missing its local configuration.");
@@ -49,7 +43,7 @@ export function clearEvent() {
 
 export async function refreshEvent() {
   const request = ++version;
-  const next = await rpc("state", { p_role: role, p_session: getSessionId() });
+  const next = await rpc("state", { p_role: role });
   if (request === version) publish(next);
 }
 
@@ -58,14 +52,6 @@ async function update(operation, args) {
   // A refresh failure must never turn a committed write into a retry.
   void refreshEvent().catch(() => {});
   return result;
-}
-
-export async function registerGuest({ invite, ...profile }) {
-  if (!uuid.test(invite)) throw new Error("Enter the invitation code supplied by Admin.");
-  const session = getSessionId() ?? crypto.randomUUID();
-  localStorage.setItem(sessionKey, session);
-  const allowed = await update("register", { p_profile: profile, p_invite: invite, p_session: session });
-  if (!allowed) throw new Error("The invitation and guest details didn’t match, or the invitation has already been used.");
 }
 
 export function addGuests(profiles) {
@@ -87,17 +73,8 @@ export const setStock = (id, stock) => updateStock("set", { id, stock });
 export const restockDrink = (id, stock) => updateStock("restock", { id, stock });
 export const setDrinkEnabled = (id, enabled) => updateStock("enable", { id, enabled });
 
-export async function openVoucher(guestId, drinkId) {
-  const voucher = await update("voucher", { p_session: getSessionId(), p_action: "open", p_id: drinkId });
-  if (voucher && state.sessions[role] === guestId && !state.vouchers[voucher.id]) {
-    publish({ ...state, vouchers: { ...state.vouchers, [voucher.id]: voucher } });
-  }
-  return voucher;
-}
-
-export function cancelVoucher(id) {
-  return update("voucher", { p_session: getSessionId(), p_action: "cancel", p_id: id });
-}
+export const addCardDrink = (name) => update("card_menu", { p_action: "add", p_values: { name } });
+export const setCardDrinkEnabled = (id, enabled) => update("card_menu", { p_action: "enable", p_values: { id, enabled } });
 
 export function scanVoucher(code, _bartender, online = navigator.onLine) {
   if (!online) return Promise.resolve({ status: "offline" });

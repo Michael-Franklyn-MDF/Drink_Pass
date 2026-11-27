@@ -1,14 +1,13 @@
 import { useSyncExternalStore } from "react";
 
 export const INITIAL_VOUCHERS = 5;
-export const VOUCHER_DURATION = 120;
 export const IDENTIFIER_TYPES = ["Staff ID", "Phone number", "Personal ID"];
 export const DEMO_BARTENDER = "Bar 1";
 export const QR_PREFIX = "drink-pass:";
 const STORAGE_KEY = "drink-pass-event-v1";
 const SAME_TAB_EVENT = "drink-pass-change";
 
-export const managerInvitation = {
+const sampleManager = {
   fullName: "Sam Kato", identifier: "MGR-001", identifierType: "Staff ID",
   department: "Operations", role: "manager",
 };
@@ -22,7 +21,7 @@ const alex = {
 const initialState = {
   guests: [
     alex,
-    { ...managerInvitation, id: "manager", remaining: null, allowance: null },
+    { ...sampleManager, id: "manager", remaining: null, allowance: null },
     {
       id: "ari", fullName: "Ari Mugo", identifier: "STF-043", identifierType: "Staff ID",
       department: "Operations", role: "staff", remaining: INITIAL_VOUCHERS, allowance: INITIAL_VOUCHERS,
@@ -38,7 +37,6 @@ const initialState = {
     id: "sample-order", guest: alex, drink: "Ginger beer", scannedAt: sampleTime,
     remaining: alex.remaining, bartender: DEMO_BARTENDER,
   }],
-  sessions: {},
 };
 
 function readRawState() {
@@ -106,14 +104,6 @@ function addGuestToState(data, profile, remaining = INITIAL_VOUCHERS) {
   return { guest, added: true };
 }
 
-export function registerGuest(profile) {
-  return update((data) => {
-    const { guest } = addGuestToState(data, profile);
-    data.sessions[profile.role] = guest.id;
-    return guest;
-  });
-}
-
 export function addGuests(profiles) {
   return update((data) => profiles.reduce((count, profile) =>
     count + Number(addGuestToState(data, profile, profile.remaining).added), 0));
@@ -154,35 +144,6 @@ export function setDrinkEnabled(drinkId, enabled) {
     if (!drink) throw new Error("This drink is no longer listed.");
     if (enabled && drink.stock <= 0) throw new Error("Restock this drink before enabling it.");
     drink.paused = !enabled;
-  });
-}
-
-export function openVoucher(guestId, drinkId) {
-  return update((data) => {
-    const now = Date.now();
-    const guest = data.guests.find(({ id }) => guestId === id);
-    const drink = data.drinks.find(({ id }) => drinkId === id);
-    if (!guest || !canServeDrink(drink) || guest.remaining === 0) return null;
-
-    const active = Object.values(data.vouchers).find((voucher) =>
-      voucher.guestId === guestId && voucher.status === "open" && voucher.expiresAt > now,
-    );
-    if (active && active.drinkId === drinkId) return active;
-    if (active) active.status = "cancelled";
-
-    const voucher = {
-      id: crypto.randomUUID(), guestId, drinkId, status: "open", expiresAt: now + VOUCHER_DURATION * 1000,
-    };
-    data.vouchers[voucher.id] = voucher;
-    return voucher;
-  });
-}
-
-export function cancelVoucher(id, status = "cancelled") {
-  return update((data) => {
-    const voucher = data.vouchers[id];
-    if (voucher?.status === "open") voucher.status = status;
-    return voucher?.status;
   });
 }
 

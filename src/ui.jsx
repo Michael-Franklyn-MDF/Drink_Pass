@@ -1,13 +1,14 @@
 import { useEffect, useRef } from "react";
 
-const ROLES = ["staff", "manager", "bartender", "admin"];
+const operatorRoles = ["bartender", "admin"];
+const retiredRoles = ["staff", "manager"];
 
 export function getAppRole() {
   const queryRole = new URLSearchParams(window.location.search).get("role");
-  const pathRole = window.location.pathname.split("/").find((part) => ROLES.includes(part));
-  if (ROLES.includes(queryRole)) return queryRole;
-  if (pathRole) return pathRole;
-  return ROLES.includes(import.meta.env.MODE) ? import.meta.env.MODE : "staff";
+  const path = window.location.pathname.split("/");
+  if (retiredRoles.includes(queryRole) || path.some((part) => retiredRoles.includes(part))) return "cards";
+  return [queryRole, ...path, import.meta.env.MODE].find((part) => operatorRoles.includes(part))
+    ?? (retiredRoles.includes(import.meta.env.MODE) ? "cards" : "admin");
 }
 
 export function isDemoMode() {
@@ -17,11 +18,10 @@ export function isDemoMode() {
 export function Shell({ role, children }) {
   useEffect(() => {
     document.title = `Drink Pass — ${role}`;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", role === "Manager" ? "#1c1c1e" : "#FFFFFF");
   }, [role]);
 
   return (
-    <main className={`app-shell ${role === "Manager" ? "manager-theme" : ""}`}>
+    <main className="app-shell">
       {children}
     </main>
   );
@@ -39,10 +39,10 @@ export function Screen({ children, className = "", role }) {
   );
 }
 
-export function ScreenTitle({ children, description, focusRef }) {
+export function ScreenTitle({ children, description }) {
   return (
     <>
-      <h1 className="screen-title" ref={focusRef} tabIndex={focusRef ? -1 : undefined}>{children}</h1>
+      <h1 className="screen-title">{children}</h1>
       {description && <p className="screen-description">{description}</p>}
     </>
   );
@@ -57,7 +57,7 @@ export function TextField({ label, name, ...props }) {
   );
 }
 
-export function Dialog({ titleId, onClose, children, className = "", focusKey }) {
+export function Dialog({ titleId, onClose, children, className = "" }) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -65,12 +65,6 @@ export function Dialog({ titleId, onClose, children, className = "", focusKey })
     dialog.showModal();
     return () => dialog.close();
   }, []);
-
-  useEffect(() => {
-    if (focusKey !== undefined) {
-      ref.current.querySelector(`#${titleId}`)?.focus({ preventScroll: true });
-    }
-  }, [focusKey, titleId]);
 
   return (
     <dialog

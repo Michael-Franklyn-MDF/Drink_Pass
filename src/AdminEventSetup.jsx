@@ -26,14 +26,9 @@ export function EventPicker({ event, events, onCreate }) {
         </div>
         <button className="button button-secondary" type="button" onClick={onCreate}>New event</button>
       </div>
-      <details className="event-links">
-        <summary>Event links</summary>
-        <div>
-          <a href={eventLink("staff", event)}>Guest</a>
-          <a href={eventLink("manager", event)}>Manager guest</a>
-          <a href={eventLink("bartender", event)}>Bartender</a>
-        </div>
-      </details>
+      {event.usesCards
+        ? <p className="screen-description">Guests use physical cards. Bartenders use the Flutter app.</p>
+        : <a className="text-link" href={eventLink("bartender", event)}>Web bartender (rehearsal)</a>}
     </div>
   );
 }
@@ -50,9 +45,8 @@ export function EventDialog({ close }) {
     const values = new FormData(event.currentTarget);
     const name = values.get("name").trim();
     const date = values.get("date");
-    const allowance = Number(values.get("allowance"));
-    if (!name || !date || !Number.isInteger(allowance) || allowance < 0 || allowance > 2147483647) {
-      setError("Enter an event name, a date, and a valid whole number of drinks.");
+    if (!name || !date) {
+      setError("Enter an event name and date.");
       return;
     }
     pending.current = true;
@@ -60,7 +54,7 @@ export function EventDialog({ close }) {
     setError("");
     try {
       requestId.current ??= crypto.randomUUID();
-      const created = await createEvent(requestId.current, name, date, allowance);
+      const created = await createEvent(requestId.current, name, date, INITIAL_VOUCHERS);
       window.location.assign(eventLink("admin", created));
     } catch (issue) {
       setError(issue.message || "Couldn’t create the event. Try again.");
@@ -76,8 +70,7 @@ export function EventDialog({ close }) {
       <form className="admin-form" onSubmit={submit}>
         <TextField label="Event name" name="name" maxLength={100} />
         <TextField label="Event date" name="date" type="date" defaultValue={localDate(Date.now())} />
-        <TextField label="Default drinks per guest" name="allowance" type="number"
-          min="0" max="2147483647" step="1" defaultValue={INITIAL_VOUCHERS} />
+        <p className="screen-description">Staff start with five drinks. Managers have an uncapped allowance.</p>
         {error && <p className="field-error" role="alert">{error}</p>}
         <div className="admin-form-actions">
           <button className="button button-primary" disabled={saving}>{saving ? "Creating…" : "Create event"}</button>

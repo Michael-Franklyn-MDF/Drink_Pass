@@ -4,7 +4,7 @@ import { Dialog, TextField } from "./ui.jsx";
 
 const TITLES = { add: "Add drink", restock: "Restock drink", update: "Update stock" };
 
-export default function StockDialog({ action, drink, close, notify }) {
+export default function StockDialog({ action, drink, close, notify, addMenuDrink }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const restocking = action === "restock";
@@ -25,7 +25,8 @@ export default function StockDialog({ action, drink, close, notify }) {
     try {
       if (action === "add") {
         if (!name) throw new Error("Enter a drink name.");
-        if (!await addDrink(name, stock)) throw new Error("A drink with this name already exists.");
+        const added = addMenuDrink ? await addMenuDrink(name) : await addDrink(name, stock);
+        if (!added) throw new Error("A drink with this name already exists.");
         notify("Drink added.");
       } else if (restocking) {
         await restockDrink(drink.id, stock);
@@ -48,8 +49,10 @@ export default function StockDialog({ action, drink, close, notify }) {
       <h2 id="stock-dialog-title">{TITLES[action]}</h2>
       <form className="admin-form" onSubmit={submit}>
         <TextField label="Drink name" name="name" defaultValue={drink?.name} readOnly={action !== "add"} />
-        <TextField label={restocking ? "Bottles to add" : "Bottles in stock"} name="stock" type="number"
-          min={restocking ? 1 : 0} step="1" defaultValue={restocking ? "" : drink?.stock ?? 0} />
+        {!addMenuDrink && (
+          <TextField label={restocking ? "Bottles to add" : "Bottles in stock"} name="stock" type="number"
+            min={restocking ? 1 : 0} step="1" defaultValue={restocking ? "" : drink?.stock ?? 0} />
+        )}
         {error && <p className="field-error" role="alert">{error}</p>}
         <div className="admin-form-actions">
           <button className="button button-primary" disabled={saving}>Save</button>

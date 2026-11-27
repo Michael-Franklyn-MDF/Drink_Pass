@@ -3,9 +3,8 @@ import { clearEvent, refreshEvent } from "./lib/liveEventStore.js";
 import { supabase } from "./lib/supabaseClient.js";
 import { Screen, ScreenTitle, TextField } from "./ui.jsx";
 
-export default function LiveEventGate({ mode, role, children }) {
-  const operator = mode === "admin" || mode === "bartender";
-  const [access, setAccess] = useState(operator ? "checking" : "loading");
+export default function LiveEventGate({ role, children }) {
+  const [access, setAccess] = useState("checking");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -29,13 +28,11 @@ export default function LiveEventGate({ mode, role, children }) {
       }
     }
     async function start() {
-      if (operator) {
-        const { data } = await supabase.auth.getSession();
-        if (!active) return;
-        if (!data.session) {
-          setAccess("sign-in");
-          return;
-        }
+      const { data } = await supabase.auth.getSession();
+      if (!active) return;
+      if (!data.session) {
+        setAccess("sign-in");
+        return;
       }
       await refresh(true);
       if (active) poll();
@@ -49,10 +46,10 @@ export default function LiveEventGate({ mode, role, children }) {
     void start();
     return () => {
       active = false;
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
       clearEvent();
     };
-  }, [operator, retry]);
+  }, [retry]);
 
   async function signIn(event) {
     event.preventDefault();
@@ -90,7 +87,7 @@ export default function LiveEventGate({ mode, role, children }) {
       <>
         {children}
         {error && <p className="field-error" role="alert">Couldn’t refresh Drink Pass. Retrying…</p>}
-        {operator && <button className="text-link live-sign-out" type="button" onClick={signOut}>Sign out</button>}
+        <button className="text-link live-sign-out" type="button" onClick={signOut}>Sign out</button>
       </>
     );
   }
@@ -108,12 +105,12 @@ export default function LiveEventGate({ mode, role, children }) {
             <button className="button button-primary" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
           </form>
         )}
-        {supabase && (access === "checking" || access === "loading") && <p role="status">Loading live event…</p>}
+        {supabase && access === "checking" && <p role="status">Loading live event…</p>}
         {access === "failed" && (
           <>
             <p className="field-error" role="alert">{error}</p>
             <button className="button button-secondary" onClick={() => setRetry((value) => value + 1)}>Try again</button>
-            {operator && <button className="text-link" onClick={signOut}>Sign out</button>}
+            <button className="text-link" onClick={signOut}>Sign out</button>
           </>
         )}
       </div>

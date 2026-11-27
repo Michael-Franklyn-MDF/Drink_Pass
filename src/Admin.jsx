@@ -4,19 +4,22 @@ import {
 } from "./eventStore.js";
 import BottomNav from "./BottomNav.jsx";
 import { EventDialog, EventPicker } from "./AdminEventSetup.jsx";
+import { addCardDrink, setCardDrinkEnabled } from "./lib/liveEventStore.js";
 import StockDialog from "./StockDialog.jsx";
 import { Dialog, Screen, ScreenTitle, TextField } from "./ui.jsx";
 
 const TABS = { guests: ["Guest list", "Guests"], stock: ["Drinks and stock", "Stock"], orders: ["Served drinks", "Orders"] };
 const ADMIN_NAV_TABS = Object.entries(TABS).map(([id, [, label]]) => ({ id, label }));
-const IMPORT_COLUMNS = ["Full name", "Identifier", "Department", "Role", "Identifier type", "Vouchers"];
+const CARD_NAV_TABS = ADMIN_NAV_TABS.map((tab) => tab.id === "stock" ? { ...tab, label: "Drinks" } : tab);
+const IMPORT_COLUMNS = ["Full name", "Identifier", "Department", "Guest type", "Identifier type", "Drink allowance"];
+const LEGACY_COLUMNS = { "guest type": "role", "drink allowance": "vouchers" };
 const ORDER_COLUMNS = ["Drink", "Guest", "Date", "Time", "Bartender"];
 
-function ChoiceField({ label, name, options }) {
+function ChoiceField({ label, name, options, ...props }) {
   return (
     <label className="admin-field">
       <span className="field-label">{label}</span>
-      <select className="text-field" name={name}>
+      <select className="text-field" name={name} {...props}>
         {options.map(([value, title]) => <option key={value} value={value}>{title}</option>)}
       </select>
     </label>
@@ -27,10 +30,11 @@ function guestProfile(values, defaultVouchers) {
   const fullName = String(values["Full name"] ?? "").trim();
   const identifier = String(values.Identifier ?? "").trim();
   const department = String(values.Department ?? "").trim();
-  const role = String(values.Role ?? "staff").trim().toLowerCase() || "staff";
+  const role = String(values["Guest type"] ?? "staff").trim().toLowerCase() || "staff";
   const inputType = String(values["Identifier type"] ?? "").trim().toLowerCase() || "staff id";
   const identifierType = IDENTIFIER_TYPES.find((type) => type.toLowerCase() === inputType);
-  const remaining = String(values.Vouchers ?? "").trim() === "" ? defaultVouchers : Number(values.Vouchers);
+  const allowance = values["Drink allowance"];
+  const remaining = role === "manager" || String(allowance ?? "").trim() === "" ? defaultVouchers : Number(allowance);
   if (!fullName || !identifier || !department || !identifierType ||
       !["staff", "manager"].includes(role) || !Number.isInteger(remaining) || remaining < 0 || remaining > 2147483647) return null;
   return { fullName, identifier, department, role, identifierType, remaining };
@@ -47,7 +51,11 @@ async function readGuests(file, defaultVouchers) {
   const profiles = [];
   for (const [index, row] of body.entries()) {
     if (row.every((value) => value == null || value === "")) continue;
-    const values = Object.fromEntries(IMPORT_COLUMNS.map((key) => [key, row[columns.indexOf(key.toLowerCase())]]));
+    const values = Object.fromEntries(IMPORT_COLUMNS.map((key) => {
+      const heading = key.toLowerCase();
+      const column = columns.includes(heading) ? heading : LEGACY_COLUMNS[heading];
+      return [key, row[columns.indexOf(column)]];
+    }));
     const profile = guestProfile(values, defaultVouchers);
     if (!profile) throw new Error(`Check guest details on row ${index + 2}.`);
     profiles.push(profile);
@@ -66,6 +74,7 @@ function AdminDialog({ panel, close, notify, defaultVouchers }) {
   const title = isImport ? "Import guests" : "Add guest";
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [guestType, setGuestType] = useState("staff");
 
   async function submit(event) {
     event.preventDefault();
@@ -123,9 +132,10 @@ function AdminDialog({ panel, close, notify, defaultVouchers }) {
             <ChoiceField label="Identifier type" name="Identifier type" options={IDENTIFIER_TYPES.map((type) => [type, type])} />
             <TextField label="Identifier" name="Identifier" />
             <TextField label="Department" name="Department" />
-            <ChoiceField label="Role" name="Role" options={[["staff", "Staff"], ["manager", "Manager"]]} />
-            {backendMode && (
-              <TextField label="Drink vouchers" name="Vouchers" type="number"
+            <ChoiceField label="Guest type" name="Guest type" value={guestType}
+              onChange={(event) => setGuestType(event.target.value)} options={[["staff", "Staff"], ["manager", "Manager"]]} />
+            {backendMode && guestType === "staff" && (
+              <TextField label="Drink allowance" name="Drink allowance" type="number"
                 min="0" max="2147483647" step="1" defaultValue={defaultVouchers} />
             )}
           </>
@@ -142,6 +152,7 @@ function AdminDialog({ panel, close, notify, defaultVouchers }) {
 
 export default function Admin() {
   const data = useEvent();
+  const cardEvent = data.event?.usesCards === true;
   const [active, setActive] = useState("guests");
   const [query, setQuery] = useState("");
   const [panel, setPanel] = useState(null);
@@ -149,6 +160,7 @@ export default function Admin() {
   const [bartender, setBartender] = useState("all");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [updatingDrink, setUpdatingDrink] = useState(null);
   const today = localDate(Date.now());
   const dates = [...new Set(data.orders.map((order) => localDate(order.scannedAt)))].sort().reverse();
   const bartenders = [...new Set(data.orders.map((order) => order.bartender))].sort();
@@ -164,14 +176,15 @@ export default function Admin() {
     localDate(order.scannedAt), formatTime(order.scannedAt), order.bartender,
   ]);
 
-  async function copyInvite(guest) {
-    setNotice("");
+  async function toggleCardDrink(drink) {
     setError("");
+    setUpdatingDrink(drink.id);
     try {
-      await navigator.clipboard.writeText(guest.invite);
-      setNotice(`Invitation code copied for ${guest.fullName}.`);
-    } catch {
-      setError("Couldn’t copy the invitation code. Check clipboard access and try again.");
+      await setCardDrinkEnabled(drink.id, !drink.active);
+    } catch (issue) {
+      setError(issue.message || "Couldn’t update the drink.");
+    } finally {
+      setUpdatingDrink(null);
     }
   }
 
@@ -192,7 +205,7 @@ export default function Admin() {
           {data.event && (
             <EventPicker event={data.event} events={data.events} onCreate={() => setPanel({ type: "event" })} />
           )}
-          <ScreenTitle>{TABS[active][0]}</ScreenTitle>
+          <ScreenTitle>{cardEvent && active === "stock" ? "Drink menu" : TABS[active][0]}</ScreenTitle>
           {active === "guests" && (
             <>
               <div className="admin-search">
@@ -204,12 +217,6 @@ export default function Admin() {
                 {guests.map((guest) => (
                   <li key={guest.id}>
                     {guest.fullName} · {guest.role === "manager" ? "Manager" : `${guest.remaining} left`}
-                    {backendMode && guest.invite && (
-                      <button className="text-link live-copy-invite" type="button"
-                        aria-label={`Copy invitation for ${guest.fullName}`} onClick={() => copyInvite(guest)}>
-                        Copy invitation
-                      </button>
-                    )}
                   </li>
                 ))}
               </ul>
@@ -220,12 +227,22 @@ export default function Admin() {
             <ul className="admin-list">
               {data.drinks.map((drink) => (
                 <li key={drink.id}>
-                  <button onClick={() => setPanel({ type: "edit-stock", drink })}>
-                    {drink.name} · {drink.stock} {drink.stock === 1 ? "bottle" : "bottles"}
-                  </button>
+                  {cardEvent ? (
+                    <>
+                      <span>{drink.name} · {drink.active ? "Enabled" : "Disabled"}</span>
+                      <button type="button" className="text-link" disabled={updatingDrink !== null}
+                        onClick={() => toggleCardDrink(drink)}>
+                        {drink.active ? "Disable" : "Enable"} {drink.name}
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => setPanel({ type: "edit-stock", drink })}>
+                      {drink.name} · {drink.stock} {drink.stock === 1 ? "bottle" : "bottles"}
+                    </button>
+                  )}
                 </li>
               ))}
-              {!data.drinks.length && <li>Add a drink to set its starting stock.</li>}
+              {!data.drinks.length && <li>{cardEvent ? "No drinks on the menu." : "Add a drink to set its starting stock."}</li>}
             </ul>
           )}
           {active === "orders" && (
@@ -262,7 +279,7 @@ export default function Admin() {
               <button className="button button-secondary" onClick={exportSpreadsheet}>Export spreadsheet</button>
             </div>
           )}
-          <BottomNav label="Admin sections" tabs={ADMIN_NAV_TABS} active={active}
+          <BottomNav label="Admin sections" tabs={cardEvent ? CARD_NAV_TABS : ADMIN_NAV_TABS} active={active}
             onSelect={(id) => { setActive(id); setNotice(""); setError(""); }}
             add={active === "orders" ? undefined : {
               label: active === "guests" ? "Add guest" : "Add drink",
@@ -286,6 +303,7 @@ export default function Admin() {
       {panel?.type === "event" && <EventDialog close={() => setPanel(null)} />}
       {panel && panel.type !== "event" && (panel.type === "edit-stock" || panel.type === "add-stock"
         ? <StockDialog action={panel.drink ? "update" : "add"} drink={panel.drink}
+            addMenuDrink={cardEvent ? addCardDrink : undefined}
             notify={setNotice} close={() => setPanel(null)} />
         : <AdminDialog panel={panel} notify={setNotice} close={() => setPanel(null)}
             defaultVouchers={data.event?.defaultVouchers ?? INITIAL_VOUCHERS} />)}

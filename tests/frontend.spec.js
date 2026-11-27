@@ -1,41 +1,24 @@
 import { expect, test } from "@playwright/test";
 import { readSheet } from "read-excel-file/node";
 import writeWorkbook from "write-excel-file/node";
-import decode from "jsqr";
+import QRCode from "qrcode";
 
-async function register(page, identifier = "STF-TEST") {
-  await page.getByRole("button", { name: "Get started" }).click();
-  await page.getByLabel("Full name", { exact: true }).fill("Taylor Demo");
-  await page.getByLabel("Staff ID", { exact: true }).fill(identifier);
-  await page.getByLabel("Department", { exact: true }).fill("Operations");
-  await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByRole("heading", { name: "Choose a drink" })).toBeVisible();
-}
-
-async function issueCode(page) {
-  await page.getByRole("button", { name: "Continue" }).click();
-  const qr = page.getByRole("img", { name: "Voucher QR code" });
-  await expect(qr).toBeVisible();
-  const src = await qr.getAttribute("src");
-  const pixels = await qr.evaluate(async (img) => {
-    await img.decode();
-    const canvas = document.createElement("canvas");
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const context = canvas.getContext("2d");
-    context.drawImage(img, 0, 0);
-    const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
-    let pixels = "";
-    for (let offset = 0; offset < data.length; offset += 32_768) {
-      pixels += String.fromCharCode(...data.subarray(offset, offset + 32_768));
-    }
-    return btoa(pixels);
-  });
-  const data = Buffer.from(pixels, "base64");
-  const side = Math.sqrt(data.length / 4);
-  const code = decode(new Uint8ClampedArray(data), side, side)?.data;
-  expect(code).toMatch(/^drink-pass:[0-9a-f-]{36}$/);
-  return { code, src };
+async function seedRehearsalVoucher(page) {
+  const guest = {
+    id: "scan-guest", fullName: "Taylor Demo", identifier: "STF-TEST",
+    department: "Operations", role: "staff", allowance: 5, remaining: 5,
+  };
+  const id = "10000000-1000-4000-8000-000000000001";
+  await page.addInitScript(({ guest, id }) => {
+    if (localStorage.getItem("drink-pass-event-v1")) return;
+    localStorage.setItem("drink-pass-event-v1", JSON.stringify({
+      guests: [guest],
+      drinks: [{ id: "sparkling-water", name: "Sparkling water", stock: 18 }],
+      vouchers: { [id]: { id, guestId: guest.id, drinkId: "sparkling-water", status: "open", expiresAt: Date.now() + 120000 } },
+      orders: [],
+    }));
+  }, { guest, id });
+  return "drink-pass:" + id;
 }
 
 async function enterCode(page, code) {
@@ -43,13 +26,30 @@ async function enterCode(page, code) {
   await page.getByRole("button", { name: "Scan code" }).click();
 }
 
-test("camera decodes a Staff voucher and updates receipt, balance, stock and orders once", async ({ page, context }) => {
+test("old guest links show physical-card instructions without loading live data", async ({ page }) => {
+  const rpcCalls = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/rest/v1/rpc/") || request.url().includes("/auth/v1/")) rpcCalls.push(request.url());
+  });
+  for (const url of [
+    "/staff", "/manager?demo=1", "/?role=staff&backend=1",
+    "/?role=manager&backend=1&event=00000000-0000-4000-8000-000000000001",
+    "/manager?role=admin",
+  ]) {
+    await page.goto(url);
+    await expect(page.getByRole("heading", { name: "Use your physical Drink Pass card" })).toBeVisible();
+    await expect(page.getByText("Show your card to the bartender.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Get started" })).toHaveCount(0);
+    await expect(page.getByLabel("Invitation code")).toHaveCount(0);
+  }
+  expect(rpcCalls).toEqual([]);
   await page.goto("/");
-  await register(page);
-  await page.getByRole("radio", { name: "Sparkling water" }).check();
-  const { code, src } = await issueCode(page);
+  await expect(page.getByRole("heading", { name: "Guest list" })).toBeVisible();
+});
 
-  const bar = await context.newPage();
+test("the rehearsal scanner records one order and Admin exports it", async ({ page: bar, context }) => {
+  const code = await seedRehearsalVoucher(bar);
+  const src = await QRCode.toDataURL(code);
   await bar.addInitScript(({ qr }) => {
     const camera = async () => {
       const canvas = document.createElement("canvas");
@@ -75,12 +75,6 @@ test("camera decodes a Staff voucher and updates receipt, balance, stock and ord
   await bar.getByRole("button", { name: "Enable camera" }).click();
   await expect(bar.getByRole("heading", { name: "Serve this drink" })).toBeVisible();
   await expect(bar.getByText("Taylor Demo · STF-TEST")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Voucher redeemed" })).toBeVisible();
-  await expect(page.getByRole("dialog").getByText("4 drinks left")).toBeVisible();
-  await page.getByRole("button", { name: "Done" }).click();
-  await page.reload();
-  await expect(page.getByText("4 drinks left")).toBeVisible();
-
   const secondBar = await context.newPage();
   await secondBar.goto("/bartender?demo=1");
   await enterCode(secondBar, code);
@@ -114,81 +108,13 @@ test("camera decodes a Staff voucher and updates receipt, balance, stock and ord
   expect((await admin.pdf()).subarray(0, 5).toString()).toBe("%PDF-");
 });
 
-test("expiry and cancellation preserve balances, and offline retry records only after reconnection", async ({ page, context }) => {
-  await page.clock.install();
-  await page.goto("/staff?demo=1");
-  await register(page);
-  const expired = await issueCode(page);
-  await expect(page.getByText("120 seconds left")).toHaveCount(1);
-  await page.clock.fastForward(30_000);
-  await expect(page.getByText("90 seconds left")).toHaveCount(1);
-  await page.clock.fastForward(90_000);
-  await expect(page.getByRole("heading", { name: "Voucher expired" })).toBeVisible();
-  await page.getByRole("button", { name: "Back to drinks" }).click();
-  await expect(page.getByText("5 drinks left")).toBeVisible();
-
-  const bar = await context.newPage();
-  await bar.clock.install({ time: new Date(Date.now() + 125_000) });
-  await bar.goto("/bartender?demo=1");
-  await enterCode(bar, expired.code);
-  await expect(bar.getByRole("heading", { name: "Voucher expired" })).toBeVisible();
-  await bar.getByRole("button", { name: "Scan next" }).click();
-
-  const cancelled = await issueCode(page);
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByText("5 drinks left")).toBeVisible();
-  await enterCode(bar, cancelled.code);
-  await expect(bar.getByRole("heading", { name: "Voucher not recognized" })).toBeVisible();
-  await bar.getByRole("button", { name: "Scan next" }).click();
-
-  const active = await issueCode(page);
-  await context.setOffline(true);
-  await enterCode(bar, active.code);
-  await expect(bar.getByRole("heading", { name: "No connection" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Show this at the bar" })).toBeVisible();
-  await context.setOffline(false);
-  await bar.getByRole("button", { name: "Try again" }).click();
-  await expect(bar.getByRole("heading", { name: "Serve this drink" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Voucher redeemed" })).toBeVisible();
-});
-
-test("Manager details are prefilled and Staff see the zero-balance screen after the final drink", async ({ page, context }) => {
-  await page.goto("/manager?demo=1");
-  await page.getByRole("button", { name: "Get started" }).click();
-  await expect(page.getByLabel("Full name")).toHaveValue("Sam Kato");
-  await expect(page.getByLabel("Full name")).toHaveAttribute("readonly", "");
-  await expect(page.getByLabel("Department")).toHaveValue("Operations");
-  await expect(page.getByText("Registered as Manager")).toBeVisible();
-  await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByRole("radio")).toHaveCount(3);
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Choose a drink" })).toBeVisible();
-  await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByRole("button", { name: "Simulate successful scan" }).click();
-  await expect(page.getByRole("heading", { name: "Voucher redeemed" })).toBeVisible();
-  await expect(page.getByRole("dialog").getByText(/drinks left/)).toHaveCount(0);
-
-  const staff = await context.newPage();
-  await staff.goto("/staff?demo=1");
-  await register(staff, "STF-042");
-  for (const remaining of [1, 0]) {
-    await staff.getByRole("button", { name: "Continue" }).click();
-    await staff.getByRole("button", { name: "Simulate successful scan" }).click();
-    await expect(staff.getByRole("dialog").getByText(remaining === 1 ? "1 drink left" : "0 drinks left")).toBeVisible();
-    await staff.getByRole("button", { name: "Done" }).click();
-  }
-  await expect(staff.getByRole("heading", { name: "No drinks left" })).toBeVisible();
-  await staff.reload();
-  await expect(staff.getByRole("heading", { name: "No drinks left" })).toBeVisible();
-});
-
-test("Admin imports and searches guests, adds stock, and updates the Staff menu", async ({ page, context }) => {
+test("Admin still imports and adds Staff and Manager guests", async ({ page }) => {
   await page.goto("/admin");
   const workbook = await writeWorkbook([
-    ["Full name", "Identifier", "Department", "Vouchers"],
-    ["Imported Demo", "STF-IMPORT", "Operations", 3],
-    ["Alex Kamau", "STF-042", "Operations", 2],
+    ["Full name", "Identifier", "Department", "Role", "Vouchers"],
+    ["Imported Demo", "STF-IMPORT", "Operations", "staff", 3],
+    ["Alex Kamau", "STF-042", "Operations", "staff", 2],
+    ["Imported Manager", "MGR-IMPORT", "Operations", "manager", ""],
   ]).toBuffer();
   await page.getByRole("button", { name: "Import" }).click();
   const panel = page.getByRole("dialog");
@@ -198,9 +124,10 @@ test("Admin imports and searches guests, adds stock, and updates the Staff menu"
     buffer: workbook,
   });
   await panel.getByRole("button", { name: "Import", exact: true }).click();
-  await expect(page.getByText("1 imported. 1 duplicates skipped.")).toBeVisible();
+  await expect(page.getByText("2 imported. 1 duplicates skipped.")).toBeVisible();
   await page.getByRole("searchbox", { name: "Search guests" }).fill("imported");
   await expect(page.getByText("Imported Demo · 3 left")).toBeVisible();
+  await expect(page.getByText("Imported Manager · Manager")).toBeVisible();
   await expect(page.getByText("Alex Kamau")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Add guest" }).click();
@@ -222,64 +149,10 @@ test("Admin imports and searches guests, adds stock, and updates the Staff menu"
   await panel.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("button", { name: "Lemonade · 0 bottles" })).toBeVisible();
 
-  const staff = await context.newPage();
-  await staff.goto("/");
-  await register(staff, "STF-IMPORT");
-  await expect(staff.getByText("3 drinks left")).toBeVisible();
-  await expect(staff.getByRole("radio", { name: /Lemonade.*Out of stock/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /copy invitation/i })).toHaveCount(0);
 });
 
-test("registration validates through the form and fits a short phone viewport", async ({ page }) => {
-  await page.setViewportSize({ width: 320, height: 568 });
-  await page.goto("/");
-  await page.getByRole("button", { name: "Get started" }).click();
-  await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByLabel("Full name")).toBeFocused();
-  await expect(page.getByText("Full name is required.")).toBeVisible();
-  await page.getByLabel("Staff ID", { exact: true }).fill("STF-123");
-  await page.getByRole("button", { name: "Phone number" }).click();
-  await expect(page.getByLabel("Phone number", { exact: true })).toHaveAttribute("inputmode", "tel");
-  await expect(page.getByLabel("Phone number", { exact: true })).toHaveValue("");
-  await page.getByLabel("Phone number", { exact: true }).fill("5550100");
-  await page.getByRole("button", { name: "Staff ID" }).click();
-  await expect(page.getByLabel("Staff ID", { exact: true })).toHaveValue("STF-123");
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
-});
-
-test("Guest voucher sheet keeps focus through expiry and can renew the same drink", async ({ page }) => {
-  await page.clock.install();
-  await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.goto("/staff?demo=1");
-  await register(page);
-  await expect(page.getByRole("heading", { name: "Choose a drink" })).toBeFocused();
-  await page.getByRole("radio", { name: "Sparkling water" }).check();
-  const original = await issueCode(page);
-  const dialog = page.getByRole("dialog");
-  const sheet = await dialog.elementHandle();
-  await expect(dialog.getByRole("heading", { name: "Show this at the bar" })).toBeFocused();
-  await expect(dialog).toHaveCSS("animation-name", "sheet-enter");
-
-  await page.clock.fastForward(91_000);
-  await expect(dialog.getByText("Expires soon")).toBeVisible();
-  await expect(dialog.getByText("30 seconds left")).toHaveCount(1);
-  await page.clock.fastForward(30_000);
-  await expect(dialog.getByRole("heading", { name: "Voucher expired" })).toBeFocused();
-  expect(await sheet.evaluate((node) => node.isConnected && node.open)).toBe(true);
-
-  await dialog.getByRole("button", { name: "Get a new voucher" }).click();
-  await expect(dialog.getByRole("heading", { name: "Show this at the bar" })).toBeFocused();
-  await expect(dialog.getByText("Sparkling water")).toBeVisible();
-  await expect(dialog.getByText("120 seconds left")).toHaveCount(1);
-  await expect(dialog.getByRole("img", { name: "Voucher QR code" })).not.toHaveAttribute("src", original.src);
-
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await expect(dialog).toHaveCSS("animation-name", "none");
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Continue" })).toBeFocused();
-  await expect(page.getByText("5 drinks left")).toBeVisible();
-});
-
-test("Bartender manages availability and restocks drinks across guest menus", async ({ page: bar, context }) => {
+test("the rehearsal bartender can still manage the rehearsal drink list", async ({ page: bar }) => {
   await bar.goto("/bartender?demo=1");
   const nav = bar.getByRole("navigation", { name: "Bartender sections" });
   await expect(nav.getByRole("button", { name: "Scan", exact: true })).toHaveAttribute("aria-current", "page");
@@ -295,47 +168,64 @@ test("Bartender manages availability and restocks drinks across guest menus", as
   const tonic = bar.getByRole("listitem", { name: "Tonic water" });
   await expect(tonic.getByText("1 bottle · Available")).toBeVisible();
 
-  const staff = await context.newPage();
-  await staff.goto("/staff");
-  await register(staff);
-  await staff.getByRole("radio", { name: "Tonic water" }).check();
-  const { code } = await issueCode(staff);
   await bar.getByRole("button", { name: "Disable Tonic water" }).click();
   await expect(tonic.getByText("1 bottle · Disabled")).toBeVisible();
-
-  const manager = await context.newPage();
-  await manager.goto("/manager");
-  await manager.getByRole("button", { name: "Get started" }).click();
-  await manager.getByRole("button", { name: "Continue" }).click();
-  await expect(manager.getByRole("radio", { name: /Tonic water.*Unavailable/ })).toBeDisabled();
-
-  await nav.getByRole("button", { name: "Scan", exact: true }).click();
-  await expect(nav.getByRole("button", { name: "Scan", exact: true })).toHaveAttribute("aria-current", "page");
-  await enterCode(bar, code);
-  await expect(bar.getByRole("heading", { name: "Drink unavailable" })).toBeVisible();
-  await expect(staff.getByRole("heading", { name: "Show this at the bar" })).toBeVisible();
-  await nav.getByRole("button", { name: "Drinks" }).click();
   await bar.getByRole("button", { name: "Enable Tonic water" }).click();
-  await expect(manager.getByRole("radio", { name: "Tonic water" })).toBeEnabled();
-  await nav.getByRole("button", { name: "Scan", exact: true }).click();
-  await expect(bar.getByRole("heading", { name: "Drink unavailable" })).toBeVisible();
-  await bar.getByRole("button", { name: "Scan next" }).click();
-  await enterCode(bar, code);
-  await expect(bar.getByRole("heading", { name: "Serve this drink" })).toBeVisible();
-  await expect(staff.getByRole("dialog").getByText("4 drinks left")).toBeVisible();
-  await expect(manager.getByRole("radio", { name: /Tonic water.*Out of stock/ })).toBeDisabled();
-
-  await nav.getByRole("button", { name: "Drinks" }).click();
-  await expect(tonic.getByText("0 bottles · Out of stock")).toBeVisible();
+  await expect(tonic.getByText("1 bottle · Available")).toBeVisible();
   await bar.getByRole("button", { name: "Restock Tonic water" }).click();
   await dialog.getByLabel("Bottles to add").fill("3");
   await dialog.getByRole("button", { name: "Save" }).click();
-  await expect(tonic.getByText("3 bottles · Available")).toBeVisible();
-  await expect(manager.getByRole("radio", { name: "Tonic water" })).toBeEnabled();
+  await expect(tonic.getByText("4 bottles · Available")).toBeVisible();
+});
 
-  await bar.getByRole("button", { name: "Edit stock for Tonic water" }).click();
-  await dialog.getByLabel("Bottles in stock").fill("0");
+test("live Admin offers a stock-free card menu and no guest access links", async ({ page }) => {
+  const event = {
+    id: "10000000-1000-4000-8000-000000000001",
+    name: "Card event", date: "2026-11-27", usesCards: true, defaultVouchers: 5,
+  };
+  const guest = {
+    id: "guest", fullName: "Test Manager", identifier: "MGR-TEST", department: "Test", role: "manager",
+    invite: "old-test-invite-do-not-display", remaining: null,
+  };
+  const drinks = [{ id: "tonic", name: "Tonic", active: true }];
+  await page.addInitScript(() => {
+    localStorage.setItem("drink-pass-auth-admin", JSON.stringify({
+      access_token: "local-test-token",
+      refresh_token: "local-test-refresh",
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      user: { id: "test-admin" },
+    }));
+  });
+  await page.route("**/rest/v1/rpc/drink_pass_state", (route) => route.fulfill({
+    json: { event, events: [event], guests: [guest], drinks, orders: [] },
+  }));
+  await page.route("**/rest/v1/rpc/drink_pass_card_menu", (route) => {
+    const { p_action: action, p_values: values, p_event: selectedEvent } = route.request().postDataJSON();
+    expect(selectedEvent).toBe(event.id);
+    if (action === "enable") {
+      expect(values).toEqual({ id: "tonic", enabled: false });
+      drinks[0].active = values.enabled;
+    } else {
+      expect(action).toBe("add");
+      expect(values).toEqual({ name: "Lime soda" });
+      drinks.push({ id: "lime", name: values.name, active: true });
+    }
+    return route.fulfill({ json: true });
+  });
+
+  await page.goto("/?backend=1&role=admin&event=" + event.id);
+  await expect(page.getByText("Test Manager · Manager")).toBeVisible();
+  await expect(page.getByText("Guests use physical cards. Bartenders use the Flutter app.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /copy invitation/i })).toHaveCount(0);
+  await expect(page.getByRole("link")).toHaveCount(0);
+  await page.getByRole("button", { name: "Drinks", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Drink menu" })).toBeVisible();
+  await page.getByRole("button", { name: "Disable Tonic" }).click();
+  await expect(page.getByText("Tonic · Disabled")).toBeVisible();
+  await page.getByRole("button", { name: "Add drink" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Bottles in stock")).toHaveCount(0);
+  await dialog.getByLabel("Drink name").fill("Lime soda");
   await dialog.getByRole("button", { name: "Save" }).click();
-  await expect(tonic.getByText("0 bottles · Out of stock")).toBeVisible();
-  await expect(manager.getByRole("radio", { name: /Tonic water.*Out of stock/ })).toBeDisabled();
+  await expect(page.getByText("Lime soda · Enabled")).toBeVisible();
 });
