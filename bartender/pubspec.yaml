@@ -1,0 +1,22 @@
+name: drink_pass_bartender
+description: Drink Pass bartender scanner.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.12.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_svg: 2.5.1
+  mobile_scanner: 7.5.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/scanner-guide.svg
